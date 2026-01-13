@@ -1,0 +1,9 @@
+# 💡 TIP
+#
+# If you want to override anything in this file, create an adjacent file called
+# `mise.local.toml`. That file is not checked in to the repository. Using this
+# file, you can specify more tools or different version of listed ones below as
+# well as overriding environment variables.
+[tools]
+go = "1.25.4"
+golangci-lint = "2.4.0"
