@@ -26,3 +26,27 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
         emit_interface: true
+  - schema: ./schema.sql
+    queries: ./internal/parents/queries.sql
+    engine: postgresql
+    database:
+      managed: true
+    gen:
+      go:
+        package: "repo"
+        out: "./internal/parents/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+        emit_interface: true
+  - schema: ./schema.sql
+    queries: ./internal/partitions/queries.sql
+    engine: postgresql
+    database:
+      managed: true
+    gen:
+      go:
+        package: "repo"
+        out: "./internal/partitions/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+        emit_interface: true
