@@ -7,3 +7,9 @@
 [tools]
 go = "1.25.4"
 golangci-lint = "2.4.0"
+
+"go:github.com/sqlc-dev/sqlc/cmd/sqlc" = "latest"
+"go:github.com/daixiang0/gci" = "latest"
+
+[env]
+DATABASE_URL = "postgres://rtukpe:postgres@localhost:5432/pg_part?sslmode=disable"

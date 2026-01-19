@@ -1,0 +1,28 @@
+version: "2"
+
+servers:
+  - engine: postgresql
+    uri: ${DATABASE_URL}
+
+#overrides:
+#  go:
+#    overrides:
+#      - column: foo
+#        go_type:
+#          import: github.com/oklog/ulid/v2
+#          type: ULID
+#          pointer: false
+
+sql:
+  - schema: ./schema.sql
+    queries: ./internal/tenants/queries.sql
+    engine: postgresql
+    database:
+      managed: true
+    gen:
+      go:
+        package: "repo"
+        out: "./internal/tenants/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+        emit_interface: true
