@@ -95,6 +95,36 @@ func TestTableNameGen(t *testing.T) {
 			formattedName: "test.user_logs_TENANT2_default",
 		},
 		{
+			name: "invalid parent table name - table name with hyphen",
+			tableName: TableName{
+				SchemaName: "test",
+				ParentName: "user-logs",
+				TenantId:   "tenant2",
+				IsDefault:  true,
+				Bounds: Bounds{
+					From: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+					To:   time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+				},
+			},
+			wantError: true,
+			err:       fmt.Errorf("parent table name cannot contain hyphens"),
+		},
+		{
+			name: "invalid partition name - tenant_id with hyphen",
+			tableName: TableName{
+				SchemaName: "test",
+				ParentName: "user_logs",
+				TenantId:   "tenant-2", // should not have a hyphen
+				IsDefault:  true,
+				Bounds: Bounds{
+					From: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+					To:   time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+				},
+			},
+			wantError: true,
+			err:       fmt.Errorf("tenant id cannot contain hyphens"),
+		},
+		{
 			name: "invalid tenant id",
 			tableName: TableName{
 				SchemaName: "test",
