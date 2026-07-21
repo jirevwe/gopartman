@@ -11,17 +11,18 @@ import (
 // a point in time. You can use this to your advantage by injecting Clocks into interfaces
 // rather than having implementations call time.Now() directly.
 //
-// Use RealClock() in production.
-// Use SimulatedClock() in test.
+// Use NewRealClock() in production.
+// Use NewSimulatedClock() in test.
 type Clock interface {
 	Now() time.Time
 }
 
-func NewRealClock() Clock { return &realTimeClock{} }
+// RealClock reads wall-clock time via time.Now().
+type RealClock struct{}
 
-type realTimeClock struct{}
+func NewRealClock() *RealClock { return &RealClock{} }
 
-func (_ *realTimeClock) Now() time.Time { return time.Now() }
+func (*RealClock) Now() time.Time { return time.Now() }
 
 // A SimulatedClock is a concrete Clock implementation that doesn't "tick" on its own.
 // Time is advanced by explicit call to the AdvanceTime() or SetTime() functions.
