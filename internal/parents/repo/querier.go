@@ -9,6 +9,9 @@ import (
 )
 
 type Querier interface {
+	GetParentTable(ctx context.Context, arg GetParentTableParams) (PartmanParentTable, error)
+	ListParentTables(ctx context.Context) ([]PartmanParentTable, error)
+	UpdateAutomaticMaintenance(ctx context.Context, arg UpdateAutomaticMaintenanceParams) error
 	UpsertParentTable(ctx context.Context, arg UpsertParentTableParams) (PartmanParentTable, error)
 }
 

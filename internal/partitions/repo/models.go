@@ -3,3 +3,22 @@
 //   sqlc v1.30.0
 
 package repo
+
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type PartmanPartition struct {
+	ID                  string
+	Name                string
+	ParentTableID       string
+	TenantID            pgtype.Text
+	PartitionBy         string
+	PartitionType       string
+	PartitionBoundsFrom pgtype.Timestamptz
+	PartitionBoundsTo   pgtype.Timestamptz
+	IsDefault           bool
+	Status              string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+}

@@ -11,12 +11,106 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getParentTable = `-- name: GetParentTable :one
+SELECT id, schema_name, table_name, tenant_column, partition_by, partition_type, partition_interval, retention_period, retention_keep_table, retention_schema, automatic_maintenance, premake, created_at, updated_at
+FROM partman.parent_tables
+WHERE schema_name = $1
+  AND table_name = $2
+`
+
+type GetParentTableParams struct {
+	SchemaName string
+	TableName  string
+}
+
+func (q *Queries) GetParentTable(ctx context.Context, arg GetParentTableParams) (PartmanParentTable, error) {
+	row := q.db.QueryRow(ctx, getParentTable, arg.SchemaName, arg.TableName)
+	var i PartmanParentTable
+	err := row.Scan(
+		&i.ID,
+		&i.SchemaName,
+		&i.TableName,
+		&i.TenantColumn,
+		&i.PartitionBy,
+		&i.PartitionType,
+		&i.PartitionInterval,
+		&i.RetentionPeriod,
+		&i.RetentionKeepTable,
+		&i.RetentionSchema,
+		&i.AutomaticMaintenance,
+		&i.Premake,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listParentTables = `-- name: ListParentTables :many
+SELECT id, schema_name, table_name, tenant_column, partition_by, partition_type, partition_interval, retention_period, retention_keep_table, retention_schema, automatic_maintenance, premake, created_at, updated_at
+FROM partman.parent_tables
+ORDER BY schema_name, table_name
+`
+
+func (q *Queries) ListParentTables(ctx context.Context) ([]PartmanParentTable, error) {
+	rows, err := q.db.Query(ctx, listParentTables)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PartmanParentTable
+	for rows.Next() {
+		var i PartmanParentTable
+		if err := rows.Scan(
+			&i.ID,
+			&i.SchemaName,
+			&i.TableName,
+			&i.TenantColumn,
+			&i.PartitionBy,
+			&i.PartitionType,
+			&i.PartitionInterval,
+			&i.RetentionPeriod,
+			&i.RetentionKeepTable,
+			&i.RetentionSchema,
+			&i.AutomaticMaintenance,
+			&i.Premake,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateAutomaticMaintenance = `-- name: UpdateAutomaticMaintenance :exec
+UPDATE partman.parent_tables
+SET automatic_maintenance = $1,
+    updated_at            = CURRENT_TIMESTAMP
+WHERE id = $2
+`
+
+type UpdateAutomaticMaintenanceParams struct {
+	AutomaticMaintenance bool
+	ID                   string
+}
+
+func (q *Queries) UpdateAutomaticMaintenance(ctx context.Context, arg UpdateAutomaticMaintenanceParams) error {
+	_, err := q.db.Exec(ctx, updateAutomaticMaintenance, arg.AutomaticMaintenance, arg.ID)
+	return err
+}
+
 const upsertParentTable = `-- name: UpsertParentTable :one
 INSERT INTO partman.parent_tables
 (id, table_name, schema_name,
  tenant_column, partition_by,
  partition_type, partition_interval,
- partition_count, retention_period)
+ retention_period, retention_keep_table,
+ retention_schema, automatic_maintenance,
+ premake)
 VALUES ($1,
         $2,
         $3,
@@ -25,21 +119,27 @@ VALUES ($1,
         $6,
         $7,
         $8,
-        $9)
+        $9,
+        $10,
+        $11,
+        $12)
 ON CONFLICT DO NOTHING
-RETURNING id, schema_name, table_name, tenant_column, partition_by, partition_type, partition_interval, partition_count, retention_period, created_at, updated_at
+RETURNING id, schema_name, table_name, tenant_column, partition_by, partition_type, partition_interval, retention_period, retention_keep_table, retention_schema, automatic_maintenance, premake, created_at, updated_at
 `
 
 type UpsertParentTableParams struct {
-	ID                string
-	TableName         string
-	SchemaName        string
-	TenantColumn      pgtype.Text
-	PartitionBy       string
-	PartitionType     string
-	PartitionInterval string
-	PartitionCount    int32
-	RetentionPeriod   string
+	ID                   string
+	TableName            string
+	SchemaName           string
+	TenantColumn         pgtype.Text
+	PartitionBy          string
+	PartitionType        string
+	PartitionInterval    string
+	RetentionPeriod      pgtype.Interval
+	RetentionKeepTable   bool
+	RetentionSchema      pgtype.Text
+	AutomaticMaintenance bool
+	Premake              int32
 }
 
 func (q *Queries) UpsertParentTable(ctx context.Context, arg UpsertParentTableParams) (PartmanParentTable, error) {
@@ -51,8 +151,11 @@ func (q *Queries) UpsertParentTable(ctx context.Context, arg UpsertParentTablePa
 		arg.PartitionBy,
 		arg.PartitionType,
 		arg.PartitionInterval,
-		arg.PartitionCount,
 		arg.RetentionPeriod,
+		arg.RetentionKeepTable,
+		arg.RetentionSchema,
+		arg.AutomaticMaintenance,
+		arg.Premake,
 	)
 	var i PartmanParentTable
 	err := row.Scan(
@@ -63,8 +166,11 @@ func (q *Queries) UpsertParentTable(ctx context.Context, arg UpsertParentTablePa
 		&i.PartitionBy,
 		&i.PartitionType,
 		&i.PartitionInterval,
-		&i.PartitionCount,
 		&i.RetentionPeriod,
+		&i.RetentionKeepTable,
+		&i.RetentionSchema,
+		&i.AutomaticMaintenance,
+		&i.Premake,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

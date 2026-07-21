@@ -9,15 +9,18 @@ import (
 )
 
 type PartmanParentTable struct {
-	ID                string
-	SchemaName        string
-	TableName         string
-	TenantColumn      pgtype.Text
-	PartitionBy       string
-	PartitionType     string
-	PartitionInterval string
-	PartitionCount    int32
-	RetentionPeriod   string
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
+	ID                   string
+	SchemaName           string
+	TableName            string
+	TenantColumn         pgtype.Text
+	PartitionBy          string
+	PartitionType        string
+	PartitionInterval    string
+	RetentionPeriod      pgtype.Interval
+	RetentionKeepTable   bool
+	RetentionSchema      pgtype.Text
+	AutomaticMaintenance bool
+	Premake              int32
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }

@@ -9,6 +9,11 @@ import (
 )
 
 type Querier interface {
+	GetDefaultPartition(ctx context.Context, arg GetDefaultPartitionParams) (PartmanPartition, error)
+	ListExpiredPartitions(ctx context.Context, arg ListExpiredPartitionsParams) ([]PartmanPartition, error)
+	ListPartitionsForParent(ctx context.Context, parentTableID string) ([]PartmanPartition, error)
+	MarkPartitionDetached(ctx context.Context, id string) error
+	MarkPartitionDropped(ctx context.Context, id string) error
 	UpsertPartition(ctx context.Context, arg UpsertPartitionParams) error
 }
 

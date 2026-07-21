@@ -11,6 +11,151 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getDefaultPartition = `-- name: GetDefaultPartition :one
+SELECT id, name, parent_table_id, tenant_id, partition_by, partition_type, partition_bounds_from, partition_bounds_to, is_default, status, created_at, updated_at
+FROM partman.partitions
+WHERE parent_table_id = $1
+  AND tenant_id IS NOT DISTINCT FROM $2
+  AND is_default = true
+`
+
+type GetDefaultPartitionParams struct {
+	ParentTableID string
+	TenantID      pgtype.Text
+}
+
+func (q *Queries) GetDefaultPartition(ctx context.Context, arg GetDefaultPartitionParams) (PartmanPartition, error) {
+	row := q.db.QueryRow(ctx, getDefaultPartition, arg.ParentTableID, arg.TenantID)
+	var i PartmanPartition
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ParentTableID,
+		&i.TenantID,
+		&i.PartitionBy,
+		&i.PartitionType,
+		&i.PartitionBoundsFrom,
+		&i.PartitionBoundsTo,
+		&i.IsDefault,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listExpiredPartitions = `-- name: ListExpiredPartitions :many
+SELECT id, name, parent_table_id, tenant_id, partition_by, partition_type, partition_bounds_from, partition_bounds_to, is_default, status, created_at, updated_at
+FROM partman.partitions
+WHERE parent_table_id = $1
+  AND partition_bounds_to <= $2
+  AND is_default = false
+  AND status = 'active'
+ORDER BY partition_bounds_from
+`
+
+type ListExpiredPartitionsParams struct {
+	ParentTableID string
+	Cutoff        pgtype.Timestamptz
+}
+
+func (q *Queries) ListExpiredPartitions(ctx context.Context, arg ListExpiredPartitionsParams) ([]PartmanPartition, error) {
+	rows, err := q.db.Query(ctx, listExpiredPartitions, arg.ParentTableID, arg.Cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PartmanPartition
+	for rows.Next() {
+		var i PartmanPartition
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ParentTableID,
+			&i.TenantID,
+			&i.PartitionBy,
+			&i.PartitionType,
+			&i.PartitionBoundsFrom,
+			&i.PartitionBoundsTo,
+			&i.IsDefault,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPartitionsForParent = `-- name: ListPartitionsForParent :many
+SELECT id, name, parent_table_id, tenant_id, partition_by, partition_type, partition_bounds_from, partition_bounds_to, is_default, status, created_at, updated_at
+FROM partman.partitions
+WHERE parent_table_id = $1
+ORDER BY partition_bounds_from
+`
+
+func (q *Queries) ListPartitionsForParent(ctx context.Context, parentTableID string) ([]PartmanPartition, error) {
+	rows, err := q.db.Query(ctx, listPartitionsForParent, parentTableID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PartmanPartition
+	for rows.Next() {
+		var i PartmanPartition
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ParentTableID,
+			&i.TenantID,
+			&i.PartitionBy,
+			&i.PartitionType,
+			&i.PartitionBoundsFrom,
+			&i.PartitionBoundsTo,
+			&i.IsDefault,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markPartitionDetached = `-- name: MarkPartitionDetached :exec
+UPDATE partman.partitions
+SET status     = 'detached',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+func (q *Queries) MarkPartitionDetached(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, markPartitionDetached, id)
+	return err
+}
+
+const markPartitionDropped = `-- name: MarkPartitionDropped :exec
+UPDATE partman.partitions
+SET status     = 'dropped',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+func (q *Queries) MarkPartitionDropped(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, markPartitionDropped, id)
+	return err
+}
+
 const upsertPartition = `-- name: UpsertPartition :exec
 INSERT INTO partman.partitions
 (id,
@@ -20,7 +165,8 @@ INSERT INTO partman.partitions
  partition_by,
  partition_type,
  partition_bounds_from,
- partition_bounds_to)
+ partition_bounds_to,
+ is_default)
 VALUES ($1,
         $2,
         $3,
@@ -28,9 +174,10 @@ VALUES ($1,
         $5,
         $6,
         $7,
-        $8)
+        $8,
+        $9)
 ON CONFLICT DO NOTHING
-RETURNING id, name, parent_table_id, tenant_id, partition_by, partition_type, partition_bounds_from, partition_bounds_to, created_at, updated_at
+RETURNING id, name, parent_table_id, tenant_id, partition_by, partition_type, partition_bounds_from, partition_bounds_to, is_default, status, created_at, updated_at
 `
 
 type UpsertPartitionParams struct {
@@ -42,6 +189,7 @@ type UpsertPartitionParams struct {
 	PartitionType       string
 	PartitionBoundsFrom pgtype.Timestamptz
 	PartitionBoundsTo   pgtype.Timestamptz
+	IsDefault           bool
 }
 
 func (q *Queries) UpsertPartition(ctx context.Context, arg UpsertPartitionParams) error {
@@ -54,6 +202,7 @@ func (q *Queries) UpsertPartition(ctx context.Context, arg UpsertPartitionParams
 		arg.PartitionType,
 		arg.PartitionBoundsFrom,
 		arg.PartitionBoundsTo,
+		arg.IsDefault,
 	)
 	return err
 }
