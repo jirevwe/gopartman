@@ -1,7 +1,7 @@
 # ADR 0000 — Domain language and ADR conventions
 
 - **Epic**: E0
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: none
 - **Blocks**: 0001, 0002
 
@@ -60,7 +60,7 @@ of it fits; some of it does not.
   one-line definition and a "not to be confused with" note.
 - `docs/adr/README.md` lists ADR-0000 and reserves slots for ADR-0001
   through ADR-0011.
-- `grep -R "not to be confused with" CONTEXT.md` returns at least 15
+- `grep -Ri "not to be confused with" CONTEXT.md` returns at least 15
   hits.
 - No ADR file in `docs/adr/` fails ASD-STE100 rules (short sentences,
   active voice) on manual review.

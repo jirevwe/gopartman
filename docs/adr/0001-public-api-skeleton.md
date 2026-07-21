@@ -165,7 +165,7 @@ invents its own regex.
 
 ## References
 
-- `CONTEXT.md` — glossary (Parent, Hook, PartitionRef, Bounds).
+- `CONTEXT.md` — glossary (Parent, Pre-Drop Hook, Bounds).
 - Old library: `/Users/rtukpe/Documents/dev/gopartman/manager.go` —
   the god object we are avoiding.
 - Old library: `/Users/rtukpe/Documents/dev/gopartman/type.go` — the

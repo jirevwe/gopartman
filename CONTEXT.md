@@ -163,8 +163,8 @@ A batch operation that moves rows out of the default partition and
 into the correct bounded child partitions. It runs one transaction per
 batch. It is safe to interrupt.
 
-- Not to be confused with: **Retention Sweep** (drain moves rows;
-  retention removes tables).
+- Not to be confused with: **Detach** and **Drop** (drain moves rows;
+  the retention sweep removes tables).
 
 ## Non-goals for v1
 

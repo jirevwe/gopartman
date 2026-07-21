@@ -87,9 +87,9 @@ advisory lock. Running two replicas causes conflicts (duplicate
   drives the tests.
 - The advisory-lock key uses `hashtext`. Collisions are rare in
   practice (schema+table pair) but not impossible. Document that
-  callers who need absolute safety use unique schema+table pairs
-  (which the `UNIQUE (schema_name, table_name)` constraint already
-  enforces).
+  callers who need absolute safety use unique schema+table pairs. The
+  `UNIQUE (schema_name, table_name)` constraint from ADR-0002 already
+  enforces this.
 
 ## Deliverables
 

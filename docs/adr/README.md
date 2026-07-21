@@ -27,7 +27,7 @@ an ADR. To supersede an ADR, add a new one and cross-link.
 
 | ID | Title | Epic | Status |
 |---|---|---|---|
-| 0000 | [Domain language and ADR conventions](0000-domain-language-and-adr-conventions.md) | E0 | Proposed |
+| 0000 | [Domain language and ADR conventions](0000-domain-language-and-adr-conventions.md) | E0 | Accepted |
 | 0001 | [Public API skeleton and package layout](0001-public-api-skeleton.md) | E1a | Proposed |
 | 0002 | [Metadata schema extension](0002-metadata-schema-extension.md) | E1b | Proposed |
 | 0003 | [Integration test harness](0003-integration-test-harness.md) | E1c | Proposed |
