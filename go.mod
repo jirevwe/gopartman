@@ -4,6 +4,7 @@ go 1.25.4
 
 require (
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/oklog/ulid/v2 v2.1.1
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
 )
 

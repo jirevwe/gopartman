@@ -68,6 +68,8 @@ The foreign keys cascade from `parent_tables` to `tenants` to `partitions`.
 ## Writing Plans
 - All plans must be written in ASD-STE100 format.
 - Always use these skills: "I have ADHD" and "Grilling"
+- Review the ADR before planning and approve it/lock it in before the plan is generated
+- If any existing already implemented ADRs exist lock them in/accpect them retroactively  
 
 ## Generated code
 
