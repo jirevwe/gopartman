@@ -31,8 +31,20 @@ type Manager struct {
 
 	provisioner provisioner.Provisioner
 	registry    registry.Registry
-	retention   retention.Retention   //nolint:unused
+	retention   *retention.Impl
 	maintainer  maintainer.Maintainer //nolint:unused
+}
+
+// retentionDropperAdapter satisfies registry.PartitionDropper by
+// converting the registry's ParentRef into the (schema, table) pair
+// that Retention.DropAll accepts. Keeps internal/retention free of
+// an import on internal/registry.
+type retentionDropperAdapter struct {
+	r *retention.Impl
+}
+
+func (a retentionDropperAdapter) DropAll(ctx context.Context, ref registry.ParentRef) error {
+	return a.r.DropAll(ctx, ref.SchemaName, ref.TableName)
 }
 
 // Start begins the maintenance loop. ADR-0007 wires the implementation.
@@ -97,11 +109,9 @@ func (*Manager) PartitionData(_ context.Context, _ ParentRef, _ ...DrainOption) 
 	return DrainReport{}, errors.ErrUnsupported
 }
 
-// initInternals constructs the Provisioner and Registry after the
-// options have been applied. Retention (ADR-0006) and Maintainer
-// (ADR-0007) remain nil until their epics land; RegisterParent works
-// without them, and RemoveParent with WithCascadeDrop returns a typed
-// error until Retention is wired.
+// initInternals constructs the Provisioner, Retention, and Registry
+// after the options have been applied. Maintainer (ADR-0007) remains
+// nil until its epic lands.
 func (m *Manager) initInternals() error {
 	prov, err := provisioner.New(provisioner.Config{
 		Pool:   m.db,
@@ -113,9 +123,21 @@ func (m *Manager) initInternals() error {
 	}
 	m.provisioner = prov
 
+	ret, err := retention.New(retention.Config{
+		Pool:   m.db,
+		Clock:  m.clock,
+		Hook:   m.hook,
+		Logger: m.logger,
+	})
+	if err != nil {
+		return fmt.Errorf("go_partman: init retention: %w", err)
+	}
+	m.retention = ret
+
 	reg, err := registry.New(registry.Config{
 		Pool:        m.db,
 		Provisioner: prov,
+		Dropper:     retentionDropperAdapter{r: ret},
 		Logger:      m.logger,
 	})
 	if err != nil {
