@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 func TestNextBoundsUTC_Hourly(t *testing.T) {

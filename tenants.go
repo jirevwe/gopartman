@@ -1,6 +1,6 @@
-package go_partman
+package gopartman
 
-import "github.com/jirevwe/go_partman/internal/registry"
+import "github.com/jirevwe/gopartman/internal/registry"
 
 // TenantConfig describes a tenant to register under a parent that has
 // a TenantColumn. Aliased from internal/registry.

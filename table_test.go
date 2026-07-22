@@ -1,4 +1,4 @@
-package go_partman
+package gopartman
 
 import (
 	"fmt"

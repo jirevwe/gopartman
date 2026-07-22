@@ -18,10 +18,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jirevwe/go_partman/internal/errs"
-	"github.com/jirevwe/go_partman/internal/provisioner"
-	"github.com/jirevwe/go_partman/internal/registry"
-	"github.com/jirevwe/go_partman/internal/retention"
+	"github.com/jirevwe/gopartman/internal/errs"
+	"github.com/jirevwe/gopartman/internal/provisioner"
+	"github.com/jirevwe/gopartman/internal/registry"
+	"github.com/jirevwe/gopartman/internal/retention"
 )
 
 // Maintainer is the seam through which Manager runs the maintenance

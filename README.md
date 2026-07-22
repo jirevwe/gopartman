@@ -1,4 +1,4 @@
-# go_partman
+# gopartman
 
 A Go library that manages range partitions in PostgreSQL. The library
 provisions upcoming partitions, drops expired ones, imports pre-existing
@@ -33,7 +33,7 @@ option.
 ## Install
 
 ```bash
-go get github.com/jirevwe/go_partman
+go get github.com/jirevwe/gopartman
 ```
 
 Prerequisites:
@@ -59,7 +59,7 @@ import (
     "time"
 
     "github.com/jackc/pgx/v5/pgxpool"
-    partman "github.com/jirevwe/go_partman"
+    partman "github.com/jirevwe/gopartman"
 )
 
 func main() {

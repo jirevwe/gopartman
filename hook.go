@@ -1,6 +1,6 @@
-package go_partman
+package gopartman
 
-import "github.com/jirevwe/go_partman/internal/hooks"
+import "github.com/jirevwe/gopartman/internal/hooks"
 
 // Hook runs before Retention drops, detaches, or archives a partition.
 // The hook is global. It filters by inspecting PartitionRef.Parent. A

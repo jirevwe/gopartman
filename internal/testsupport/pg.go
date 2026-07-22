@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	tcpg "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	partman "github.com/jirevwe/go_partman"
+	partman "github.com/jirevwe/gopartman"
 )
 
 var (

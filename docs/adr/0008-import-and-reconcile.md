@@ -8,7 +8,7 @@
 ## Context
 
 Real adopters have existing partitioned tables. They do not want to
-drop and re-create. They want to point `go_partman` at what they have
+drop and re-create. They want to point `gopartman` at what they have
 and let it take over.
 
 The old library at `/Users/rtukpe/Documents/dev/gopartman/manager.go`

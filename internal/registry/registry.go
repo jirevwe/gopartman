@@ -17,11 +17,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 
-	"github.com/jirevwe/go_partman/internal/errs"
-	"github.com/jirevwe/go_partman/internal/naming"
-	parentsrepo "github.com/jirevwe/go_partman/internal/parents/repo"
-	"github.com/jirevwe/go_partman/internal/provisioner"
-	tenantsrepo "github.com/jirevwe/go_partman/internal/tenants/repo"
+	"github.com/jirevwe/gopartman/internal/errs"
+	"github.com/jirevwe/gopartman/internal/naming"
+	parentsrepo "github.com/jirevwe/gopartman/internal/parents/repo"
+	"github.com/jirevwe/gopartman/internal/provisioner"
+	tenantsrepo "github.com/jirevwe/gopartman/internal/tenants/repo"
 )
 
 const defaultPremake = 4

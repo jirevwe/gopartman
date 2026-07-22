@@ -1,4 +1,4 @@
-// Package errs holds every public sentinel go_partman exposes. The root
+// Package errs holds every public sentinel gopartman exposes. The root
 // package re-exports each one; internal packages import this package
 // directly. Keep this package free of any other symbols.
 package errs

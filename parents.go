@@ -1,6 +1,6 @@
-package go_partman
+package gopartman
 
-import "github.com/jirevwe/go_partman/internal/registry"
+import "github.com/jirevwe/gopartman/internal/registry"
 
 // ParentConfig describes a partitioned parent table to register with
 // RegisterParent. Aliased from internal/registry.

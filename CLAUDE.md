@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository is a Go library. The name of the library is `go_partman`.
+This repository is a Go library. The name of the library is `gopartman`.
 The library controls partitioned tables in PostgreSQL.
 The library can partition a table by date.
 The library can also partition a table by tenant ID.
@@ -44,7 +44,7 @@ Use these commands during development:
 
 ## Architecture
 
-The root package is `go_partman`.
+The root package is `gopartman`.
 The root package has these files:
 
 - `clock.go` gives a `Clock` interface. Use `NewRealClock()` in production code. Use `NewSimulatedClock(t)` in test code. The simulated clock has the methods `SetTime` and `AdvanceTime`. New code that reads time must accept a `Clock`. New code must not call `time.Now()` directly.

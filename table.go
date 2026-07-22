@@ -1,6 +1,6 @@
-package go_partman
+package gopartman
 
-import "github.com/jirevwe/go_partman/internal/naming"
+import "github.com/jirevwe/gopartman/internal/naming"
 
 // TableName represents the components of a partition table name.
 // Aliased from internal/naming so both the root package and

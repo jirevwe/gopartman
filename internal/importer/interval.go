@@ -3,7 +3,7 @@ package importer
 import (
 	"fmt"
 
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 // intervalKind mirrors provisioner's private kind enum. Kept local to

@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 func TestOptions_Resolved_Defaults(t *testing.T) {

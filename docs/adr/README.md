@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-This directory holds one ADR per major decision in `go_partman`. Each
+This directory holds one ADR per major decision in `gopartman`. Each
 ADR is small enough that one fresh Claude session can turn it into an
 actionable implementation plan.
 

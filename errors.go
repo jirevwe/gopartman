@@ -1,8 +1,8 @@
 // Sentinels callers branch on with errors.Is. Aliased from internal/errs
 // so root and internal packages agree on identity.
-package go_partman
+package gopartman
 
-import "github.com/jirevwe/go_partman/internal/errs"
+import "github.com/jirevwe/gopartman/internal/errs"
 
 var (
 	ErrParentNotFound          = errs.ErrParentNotFound

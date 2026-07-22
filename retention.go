@@ -1,6 +1,6 @@
-package go_partman
+package gopartman
 
-import "github.com/jirevwe/go_partman/internal/retention"
+import "github.com/jirevwe/gopartman/internal/retention"
 
 // SweepReport summarizes one Retention.Sweep call. Aliased from
 // internal/retention.

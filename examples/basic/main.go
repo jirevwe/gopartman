@@ -17,7 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	partman "github.com/jirevwe/go_partman"
+	partman "github.com/jirevwe/gopartman"
 )
 
 const (

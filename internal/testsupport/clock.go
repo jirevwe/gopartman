@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	partman "github.com/jirevwe/go_partman"
+	partman "github.com/jirevwe/gopartman"
 )
 
 // clockEpoch is the default starting instant for the simulated clock.

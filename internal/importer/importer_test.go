@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 func TestCompareNameAndBound_Aligned(t *testing.T) {

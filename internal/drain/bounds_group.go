@@ -5,8 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/jirevwe/go_partman/internal/naming"
-	"github.com/jirevwe/go_partman/internal/provisioner"
+	"github.com/jirevwe/gopartman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/provisioner"
 )
 
 // groupKey identifies one target partition. The zero-value Bounds is

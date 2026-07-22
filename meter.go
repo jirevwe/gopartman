@@ -1,6 +1,6 @@
-package go_partman
+package gopartman
 
-// Meter is the observability sink for go_partman. Implementations must
+// Meter is the observability sink for gopartman. Implementations must
 // be safe for concurrent use — the maintenance loop calls Counter and
 // Histogram from multiple goroutines. ADR-0010 documents the metric
 // names and tag conventions. Tags are alternating key, value strings;

@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/jirevwe/go_partman/internal/hooks"
+	"github.com/jirevwe/gopartman/internal/hooks"
 )
 
 func TestComputeCutoff_MicrosecondsOnly(t *testing.T) {

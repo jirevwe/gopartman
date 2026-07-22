@@ -1,4 +1,4 @@
-package go_partman
+package gopartman
 
 // DrainOption tunes one PartitionData call. Concrete constructors are
 // WithBatchSize, WithMaxBatches, and WithTenant. See ADR-0009.

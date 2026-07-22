@@ -13,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 
-	partman "github.com/jirevwe/go_partman"
-	"github.com/jirevwe/go_partman/internal/hooks"
-	"github.com/jirevwe/go_partman/internal/retention"
-	"github.com/jirevwe/go_partman/internal/testsupport"
+	partman "github.com/jirevwe/gopartman"
+	"github.com/jirevwe/gopartman/internal/hooks"
+	"github.com/jirevwe/gopartman/internal/retention"
+	"github.com/jirevwe/gopartman/internal/testsupport"
 )
 
 // -----------------------------------------------------------------------------

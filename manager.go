@@ -1,4 +1,4 @@
-package go_partman
+package gopartman
 
 import (
 	"context"
@@ -8,15 +8,15 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jirevwe/go_partman/internal/drain"
-	"github.com/jirevwe/go_partman/internal/importer"
-	"github.com/jirevwe/go_partman/internal/maintainer"
-	"github.com/jirevwe/go_partman/internal/provisioner"
-	"github.com/jirevwe/go_partman/internal/registry"
-	"github.com/jirevwe/go_partman/internal/retention"
+	"github.com/jirevwe/gopartman/internal/drain"
+	"github.com/jirevwe/gopartman/internal/importer"
+	"github.com/jirevwe/gopartman/internal/maintainer"
+	"github.com/jirevwe/gopartman/internal/provisioner"
+	"github.com/jirevwe/gopartman/internal/registry"
+	"github.com/jirevwe/gopartman/internal/retention"
 )
 
-// Manager is the facade for go_partman. It composes the four internal
+// Manager is the facade for gopartman. It composes the four internal
 // interfaces (registry, provisioner, retention, maintainer). Methods
 // return errors.ErrUnsupported until downstream epics wire them.
 //
@@ -190,7 +190,7 @@ func (m *Manager) initInternals() error {
 		Meter:  m.meter,
 	})
 	if err != nil {
-		return fmt.Errorf("go_partman: init provisioner: %w", err)
+		return fmt.Errorf("gopartman: init provisioner: %w", err)
 	}
 	m.provisioner = prov
 
@@ -202,7 +202,7 @@ func (m *Manager) initInternals() error {
 		Meter:  m.meter,
 	})
 	if err != nil {
-		return fmt.Errorf("go_partman: init retention: %w", err)
+		return fmt.Errorf("gopartman: init retention: %w", err)
 	}
 	m.retention = ret
 
@@ -213,7 +213,7 @@ func (m *Manager) initInternals() error {
 		Logger:      m.logger,
 	})
 	if err != nil {
-		return fmt.Errorf("go_partman: init registry: %w", err)
+		return fmt.Errorf("gopartman: init registry: %w", err)
 	}
 	m.registry = reg
 
@@ -228,7 +228,7 @@ func (m *Manager) initInternals() error {
 		Schedule:    m.schedule,
 	})
 	if err != nil {
-		return fmt.Errorf("go_partman: init maintainer: %w", err)
+		return fmt.Errorf("gopartman: init maintainer: %w", err)
 	}
 	m.maintainer = maint
 
@@ -237,7 +237,7 @@ func (m *Manager) initInternals() error {
 		Logger: m.logger,
 	})
 	if err != nil {
-		return fmt.Errorf("go_partman: init importer: %w", err)
+		return fmt.Errorf("gopartman: init importer: %w", err)
 	}
 	m.importer = imp
 
@@ -248,7 +248,7 @@ func (m *Manager) initInternals() error {
 		Meter:  m.meter,
 	})
 	if err != nil {
-		return fmt.Errorf("go_partman: init drain: %w", err)
+		return fmt.Errorf("gopartman: init drain: %w", err)
 	}
 	m.drain = dr
 	return nil

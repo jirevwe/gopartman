@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 // buildBoundedPartitionDDL returns a CREATE TABLE ... PARTITION OF ...

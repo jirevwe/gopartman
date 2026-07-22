@@ -1,14 +1,14 @@
-# CONTEXT — `go_partman` domain glossary
+# CONTEXT — `gopartman` domain glossary
 
 > This file is the single source of truth for terms used across the
-> `go_partman` codebase and its ADRs. If a new term is invented in a PR,
+> `gopartman` codebase and its ADRs. If a new term is invented in a PR,
 > add it here in the same PR. All prose uses ASD-STE100 (Simplified
 > Technical English): short sentences, active voice, one idea per
 > sentence.
 
 ## Scope
 
-`go_partman` is a Go library. It manages PostgreSQL partitioned tables.
+`gopartman` is a Go library. It manages PostgreSQL partitioned tables.
 It has one bounded context. All terms below belong to that context.
 
 ## Glossary
@@ -17,7 +17,7 @@ It has one bounded context. All terms below belong to that context.
 
 An ordinary PostgreSQL partitioned table. A parent has `PARTITION BY
 RANGE (...)` on either a time column or a `(tenant, time)` composite.
-The user creates the parent. `go_partman` does not create it.
+The user creates the parent. `gopartman` does not create it.
 
 - Registered with: `Registry.RegisterParent`.
 - Not to be confused with: **Partition** (a child of the parent).
@@ -152,7 +152,7 @@ row without a matching PG table (orphan).
 
 ### `partman` schema
 
-The PostgreSQL schema that holds `go_partman` metadata: `parent_tables`,
+The PostgreSQL schema that holds `gopartman` metadata: `parent_tables`,
 `tenants`, `partitions`. The library never puts user data here.
 
 - Not to be confused with: **user schema** (where user tables live).
@@ -168,7 +168,7 @@ batch. It is safe to interrupt.
 
 ## Public API surface
 
-Every exported name in the root `go_partman` package. One sentence per
+Every exported name in the root `gopartman` package. One sentence per
 name. Details of each concept live above in the glossary; this section
 maps names to concepts.
 
@@ -274,7 +274,7 @@ maps names to concepts.
 
 ## Non-goals for v1
 
-These terms appear in pg_partman but NOT in `go_partman` v1:
+These terms appear in pg_partman but NOT in `gopartman` v1:
 
 - **List partitioning**, **Hash partitioning**
 - **Sub-partitioning**, **Template Table**

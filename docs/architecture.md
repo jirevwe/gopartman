@@ -1,7 +1,7 @@
 # Architecture
 
-`go_partman` follows a facade + internal-package layout. The root
-package `go_partman` exports one facade type (`Manager`) and a set of
+`gopartman` follows a facade + internal-package layout. The root
+package `gopartman` exports one facade type (`Manager`) and a set of
 small helpers. All behavior lives under `internal/`, one interface per
 concern. `Manager` composes those concerns; callers never import
 `internal/` directly.
@@ -14,7 +14,7 @@ in `manager.go`.
 ```
                     +----------------------------------+
                     |            Manager               |
-                    |  (root package: go_partman)      |
+                    |  (root package: gopartman)      |
                     +----------------------------------+
                          |         |         |
         +----------------+----+----+----+----+----------------+

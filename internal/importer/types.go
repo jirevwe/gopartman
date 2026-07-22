@@ -4,8 +4,8 @@
 package importer
 
 import (
-	"github.com/jirevwe/go_partman/internal/hooks"
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/hooks"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 // ParentRef mirrors partman.ParentRef so this package does not import

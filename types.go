@@ -1,6 +1,6 @@
-package go_partman
+package gopartman
 
-import "github.com/jirevwe/go_partman/internal/naming"
+import "github.com/jirevwe/gopartman/internal/naming"
 
 // Partition-interval sentinels. Three of these are honest durations
 // (hourly, daily, weekly). PartitionMonthInterval is NOT arithmetically

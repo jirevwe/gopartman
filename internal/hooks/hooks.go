@@ -1,5 +1,5 @@
 // Package hooks holds the Hook contract shared between the root
-// go_partman facade and internal consumers (retention, maintainer).
+// gopartman facade and internal consumers (retention, maintainer).
 // The root package re-exports every type declared here via aliases so
 // callers still see partman.Hook, partman.PartitionRef, and the
 // HookDrop/HookDetach/HookArchive/HookSkip constants.
@@ -8,7 +8,7 @@ package hooks
 import (
 	"context"
 
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 // Hook runs before Retention drops, detaches, or archives a partition.

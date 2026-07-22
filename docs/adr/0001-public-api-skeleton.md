@@ -29,7 +29,7 @@ invents its own regex.
 
 ## Decision
 
-- Root package `go_partman` exposes the facade `Manager` and small
+- Root package `gopartman` exposes the facade `Manager` and small
   helpers. No business logic in the root.
 - Split behavior into internal packages under `internal/`:
   - `internal/registry` — parents and tenants lifecycle.

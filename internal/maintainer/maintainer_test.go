@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jirevwe/go_partman/internal/provisioner"
-	"github.com/jirevwe/go_partman/internal/registry"
-	"github.com/jirevwe/go_partman/internal/retention"
+	"github.com/jirevwe/gopartman/internal/provisioner"
+	"github.com/jirevwe/gopartman/internal/registry"
+	"github.com/jirevwe/gopartman/internal/retention"
 )
 
 // -----------------------------------------------------------------------------

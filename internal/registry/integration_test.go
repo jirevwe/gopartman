@@ -12,10 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 
-	partman "github.com/jirevwe/go_partman"
-	"github.com/jirevwe/go_partman/internal/provisioner"
-	"github.com/jirevwe/go_partman/internal/registry"
-	"github.com/jirevwe/go_partman/internal/testsupport"
+	partman "github.com/jirevwe/gopartman"
+	"github.com/jirevwe/gopartman/internal/provisioner"
+	"github.com/jirevwe/gopartman/internal/registry"
+	"github.com/jirevwe/gopartman/internal/testsupport"
 )
 
 type fixture struct {

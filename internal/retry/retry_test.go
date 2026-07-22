@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/jirevwe/go_partman/internal/errs"
+	"github.com/jirevwe/gopartman/internal/errs"
 )
 
 func fastPolicy() Policy {

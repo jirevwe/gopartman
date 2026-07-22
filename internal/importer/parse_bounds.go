@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 // parsedBound is the semantic form of a child's pg_get_expr(relpartbound)

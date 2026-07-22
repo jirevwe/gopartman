@@ -1,4 +1,4 @@
-package go_partman
+package gopartman
 
 import (
 	"fmt"
@@ -28,10 +28,10 @@ func New(opts ...Option) (*Manager, error) {
 		}
 	}
 	if m.db == nil {
-		return nil, fmt.Errorf("go_partman: WithDB is required")
+		return nil, fmt.Errorf("gopartman: WithDB is required")
 	}
 	if m.clock == nil {
-		return nil, fmt.Errorf("go_partman: WithClock is required")
+		return nil, fmt.Errorf("gopartman: WithClock is required")
 	}
 	if err := m.initInternals(); err != nil {
 		return nil, err

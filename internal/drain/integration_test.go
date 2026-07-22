@@ -13,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 
-	"github.com/jirevwe/go_partman/internal/drain"
-	"github.com/jirevwe/go_partman/internal/maintainer"
-	"github.com/jirevwe/go_partman/internal/naming"
-	"github.com/jirevwe/go_partman/internal/testsupport"
+	"github.com/jirevwe/gopartman/internal/drain"
+	"github.com/jirevwe/gopartman/internal/maintainer"
+	"github.com/jirevwe/gopartman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/testsupport"
 )
 
 // -----------------------------------------------------------------------------

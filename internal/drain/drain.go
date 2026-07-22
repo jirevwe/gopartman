@@ -15,12 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jirevwe/go_partman/internal/errs"
-	"github.com/jirevwe/go_partman/internal/maintainer"
-	"github.com/jirevwe/go_partman/internal/naming"
-	parentsrepo "github.com/jirevwe/go_partman/internal/parents/repo"
-	partitionsrepo "github.com/jirevwe/go_partman/internal/partitions/repo"
-	"github.com/jirevwe/go_partman/internal/retry"
+	"github.com/jirevwe/gopartman/internal/errs"
+	"github.com/jirevwe/gopartman/internal/maintainer"
+	"github.com/jirevwe/gopartman/internal/naming"
+	parentsrepo "github.com/jirevwe/gopartman/internal/parents/repo"
+	partitionsrepo "github.com/jirevwe/gopartman/internal/partitions/repo"
+	"github.com/jirevwe/gopartman/internal/retry"
 )
 
 // ErrParentBusy is returned when the advisory lock for the parent is

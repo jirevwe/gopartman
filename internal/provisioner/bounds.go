@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jirevwe/go_partman/internal/naming"
+	"github.com/jirevwe/gopartman/internal/naming"
 )
 
 // kind is the internal enum of supported partition intervals. It maps

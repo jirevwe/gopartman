@@ -6,7 +6,7 @@
 //   - net.Error where Timeout() is true
 //
 // Never retries context.Canceled, context.DeadlineExceeded, or any
-// wrapped go_partman sentinel. Callers put retry.Do outside the
+// wrapped gopartman sentinel. Callers put retry.Do outside the
 // database transaction; a PostgreSQL transaction is aborted once the
 // first serialization/deadlock error fires and must be restarted.
 package retry
@@ -21,7 +21,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/jirevwe/go_partman/internal/errs"
+	"github.com/jirevwe/gopartman/internal/errs"
 )
 
 // Meter is the minimum observability surface retry needs. The root

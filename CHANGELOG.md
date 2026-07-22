@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `go_partman` are recorded in this file.
+All notable changes to `gopartman` are recorded in this file.
 
 The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project
@@ -115,4 +115,4 @@ Nothing.
 
 Nothing.
 
-[0.1.0]: https://github.com/jirevwe/go_partman/releases/tag/v0.1.0
+[0.1.0]: https://github.com/jirevwe/gopartman/releases/tag/v0.1.0

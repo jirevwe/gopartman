@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jirevwe/go_partman/internal/errs"
+	"github.com/jirevwe/gopartman/internal/errs"
 )
 
 // identRegex mirrors the naming.alphaNumericRegex used by TableName.Build.
