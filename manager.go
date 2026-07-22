@@ -32,7 +32,7 @@ type Manager struct {
 	provisioner provisioner.Provisioner
 	registry    registry.Registry
 	retention   *retention.Impl
-	maintainer  maintainer.Maintainer //nolint:unused
+	maintainer  maintainer.Maintainer
 }
 
 // retentionDropperAdapter satisfies registry.PartitionDropper by
@@ -47,21 +47,20 @@ func (a retentionDropperAdapter) DropAll(ctx context.Context, ref registry.Paren
 	return a.r.DropAll(ctx, ref.SchemaName, ref.TableName)
 }
 
-// Start begins the maintenance loop. ADR-0007 wires the implementation.
-func (*Manager) Start(_ context.Context) error {
-	return errors.ErrUnsupported
+// Start begins the maintenance loop. See ADR-0007.
+func (m *Manager) Start(ctx context.Context) error {
+	return m.maintainer.Start(ctx)
 }
 
 // Stop halts the maintenance loop, honoring the context deadline.
-// ADR-0007 wires the implementation.
-func (*Manager) Stop(_ context.Context) error {
-	return errors.ErrUnsupported
+// See ADR-0007.
+func (m *Manager) Stop(ctx context.Context) error {
+	return m.maintainer.Stop(ctx)
 }
 
-// Maintain triggers one maintenance run. ADR-0007 wires the
-// implementation.
-func (*Manager) Maintain(_ context.Context) error {
-	return errors.ErrUnsupported
+// Maintain triggers one maintenance run. See ADR-0007.
+func (m *Manager) Maintain(ctx context.Context) error {
+	return m.maintainer.Maintain(ctx)
 }
 
 // RegisterParent records a parent table in the metadata schema and
@@ -144,5 +143,19 @@ func (m *Manager) initInternals() error {
 		return fmt.Errorf("go_partman: init registry: %w", err)
 	}
 	m.registry = reg
+
+	maint, err := maintainer.New(maintainer.Config{
+		Pool:        m.db,
+		Registry:    reg,
+		Provisioner: prov,
+		Retention:   ret,
+		Clock:       m.clock,
+		Logger:      m.logger,
+		Schedule:    m.schedule,
+	})
+	if err != nil {
+		return fmt.Errorf("go_partman: init maintainer: %w", err)
+	}
+	m.maintainer = maint
 	return nil
 }

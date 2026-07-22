@@ -28,13 +28,13 @@ an ADR. To supersede an ADR, add a new one and cross-link.
 | ID | Title | Epic | Status |
 |---|---|---|---|
 | 0000 | [Domain language and ADR conventions](0000-domain-language-and-adr-conventions.md) | E0 | Accepted |
-| 0001 | [Public API skeleton and package layout](0001-public-api-skeleton.md) | E1a | Proposed |
-| 0002 | [Metadata schema extension](0002-metadata-schema-extension.md) | E1b | Proposed |
-| 0003 | [Integration test harness](0003-integration-test-harness.md) | E1c | Proposed |
-| 0004 | [Provisioner — create partitions and default](0004-provisioner-create-partitions.md) | E2 | Proposed |
-| 0005 | [Registry lifecycle](0005-registry-lifecycle.md) | E3 | Proposed |
-| 0006 | [Retention drop-or-detach with Hook](0006-retention-drop-or-detach.md) | E4 | Proposed |
-| 0007 | [Maintainer + scheduler + advisory lock](0007-maintainer-scheduler-advisory-lock.md) | E5 | Proposed |
+| 0001 | [Public API skeleton and package layout](0001-public-api-skeleton.md) | E1a | Accepted |
+| 0002 | [Metadata schema extension](0002-metadata-schema-extension.md) | E1b | Accepted |
+| 0003 | [Integration test harness](0003-integration-test-harness.md) | E1c | Accepted |
+| 0004 | [Provisioner — create partitions and default](0004-provisioner-create-partitions.md) | E2 | Accepted |
+| 0005 | [Registry lifecycle](0005-registry-lifecycle.md) | E3 | Accepted |
+| 0006 | [Retention drop-or-detach with Hook](0006-retention-drop-or-detach.md) | E4 | Accepted |
+| 0007 | [Maintainer + scheduler + advisory lock](0007-maintainer-scheduler-advisory-lock.md) | E5 | Accepted |
 | 0008 | [Import and reconcile existing partitions](0008-import-and-reconcile.md) | E6 | Proposed |
 | 0009 | [`partition_data` helper — drain the default](0009-partition-data-drain.md) | E7 | Proposed |
 | 0010 | [Observability, typed errors, retry policy](0010-observability-errors-retry.md) | E8 | Proposed |

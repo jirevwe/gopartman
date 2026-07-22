@@ -1,7 +1,7 @@
 # ADR 0006 — Retention: drop or detach with Hook
 
 - **Epic**: E4
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: 0001, 0002, 0004
 - **Blocks**: 0007
 

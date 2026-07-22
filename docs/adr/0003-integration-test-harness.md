@@ -1,7 +1,7 @@
 # ADR 0003 — Integration test harness
 
 - **Epic**: E1c
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: 0002
 - **Blocks**: 0004, 0005, 0006, 0007, 0008, 0009
 
