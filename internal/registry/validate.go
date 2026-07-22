@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/jirevwe/go_partman/internal/errs"
 )
 
 // identRegex mirrors the naming.alphaNumericRegex used by TableName.Build.
@@ -19,7 +21,7 @@ func validateIdentifier(kind, value string) error {
 		return fmt.Errorf("partman: %s is required", kind)
 	}
 	if !identRegex.MatchString(value) {
-		return fmt.Errorf("partman: %s %q contains invalid characters (allowed: %s)", kind, value, identRegex.String())
+		return fmt.Errorf("%w: %s %q (allowed: %s)", errs.ErrInvalidIdentifier, kind, value, identRegex.String())
 	}
 	return nil
 }
@@ -74,13 +76,13 @@ func assertPartitionedByRange(ctx context.Context, pool *pgxpool.Pool, schema, t
 		WHERE n.nspname = $1 AND c.relname = $2
 	`, schema, table).Scan(&strat)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("%w: %s.%s", ErrTargetNotPartitioned, schema, table)
+		return fmt.Errorf("%w: %s.%s", errs.ErrTargetNotPartitioned, schema, table)
 	}
 	if err != nil {
 		return fmt.Errorf("partman: assertPartitionedByRange %s.%s: %w", schema, table, err)
 	}
 	if strat != "r" {
-		return fmt.Errorf("%w: %s.%s uses partstrat=%q, want 'r'", ErrTargetNotPartitioned, schema, table, strat)
+		return fmt.Errorf("%w: %s.%s uses partstrat=%q, want 'r'", errs.ErrTargetNotPartitioned, schema, table, strat)
 	}
 	return nil
 }
@@ -93,7 +95,7 @@ func assertColumnExists(ctx context.Context, pool *pgxpool.Pool, schema, table, 
 		WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
 	`, schema, table, column).Scan(&one)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("%w: %s.%s.%s", ErrColumnMissing, schema, table, column)
+		return fmt.Errorf("%w: %s.%s.%s", errs.ErrColumnMissing, schema, table, column)
 	}
 	if err != nil {
 		return fmt.Errorf("partman: assertColumnExists %s.%s.%s: %w", schema, table, column, err)
@@ -107,7 +109,7 @@ func assertSchemaExists(ctx context.Context, pool *pgxpool.Pool, schema string) 
 		SELECT 1 FROM pg_namespace WHERE nspname = $1
 	`, schema).Scan(&one)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("%w: %s", ErrArchiveSchemaMissing, schema)
+		return fmt.Errorf("%w: %s", errs.ErrArchiveSchemaMissing, schema)
 	}
 	if err != nil {
 		return fmt.Errorf("partman: assertSchemaExists %s: %w", schema, err)

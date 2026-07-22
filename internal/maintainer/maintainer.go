@@ -18,6 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jirevwe/go_partman/internal/errs"
 	"github.com/jirevwe/go_partman/internal/provisioner"
 	"github.com/jirevwe/go_partman/internal/registry"
 	"github.com/jirevwe/go_partman/internal/retention"
@@ -57,6 +58,18 @@ type Clock interface {
 	Now() time.Time
 }
 
+// Meter is the observability sink Maintainer needs. The root
+// partman.Meter satisfies it. A nil Meter turns emission off.
+type Meter interface {
+	Counter(name string, delta int64, tags ...string)
+	Histogram(name string, value float64, tags ...string)
+}
+
+type noopMeter struct{}
+
+func (noopMeter) Counter(name string, delta int64, tags ...string)     {}
+func (noopMeter) Histogram(name string, value float64, tags ...string) {}
+
 // Locker guards one parent's maintenance step against concurrent
 // maintainers. The default implementation uses PostgreSQL session-
 // scoped advisory locks. Tests inject a fake Locker to drive the loop
@@ -79,6 +92,7 @@ type Config struct {
 	Retention   RetentionSweeper
 	Clock       Clock
 	Logger      *slog.Logger
+	Meter       Meter
 	// Schedule sets the interval between ticks. Zero means "1 hour",
 	// matching the ADR-0007 default.
 	Schedule time.Duration
@@ -96,6 +110,7 @@ type Impl struct {
 	retention   RetentionSweeper
 	clock       Clock
 	logger      *slog.Logger
+	meter       Meter
 	schedule    time.Duration
 	locker      Locker
 
@@ -124,6 +139,10 @@ func New(cfg Config) (*Impl, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	meter := cfg.Meter
+	if meter == nil {
+		meter = noopMeter{}
+	}
 	schedule := cfg.Schedule
 	if schedule <= 0 {
 		schedule = defaultSchedule
@@ -142,6 +161,7 @@ func New(cfg Config) (*Impl, error) {
 		retention:   cfg.Retention,
 		clock:       cfg.Clock,
 		logger:      logger,
+		meter:       meter,
 		schedule:    schedule,
 		locker:      locker,
 	}
@@ -218,10 +238,10 @@ func (m *Impl) Maintain(ctx context.Context) error {
 		"processed_count", processed,
 		"skipped_count", skipped,
 		"panicked_count", panicked,
-		"total_duration_ms", tickDuration.Milliseconds(),
+		"duration_ms", tickDuration.Milliseconds(),
 	)
-	// TODO(ADR-0010): emit partman.maintenance_runs_total and
-	// partman.maintenance_duration_seconds via the Meter.
+	m.meter.Counter("partman.maintenance_runs_total", 1)
+	m.meter.Histogram("partman.maintenance_duration_seconds", tickDuration.Seconds())
 	return nil
 }
 
@@ -249,7 +269,7 @@ func (m *Impl) processParent(ctx context.Context, p registry.ParentInfo) (result
 				"parent", label,
 				"panic", fmt.Sprintf("%v", r),
 			)
-			// TODO(ADR-0010): emit partman.parents_panicked_total.
+			m.meter.Counter("partman.parents_panicked_total", 1, "parent", label)
 			result = parentResultPanicked
 		}
 	}()
@@ -265,8 +285,9 @@ func (m *Impl) processParent(ctx context.Context, p registry.ParentInfo) (result
 	if !locked {
 		m.logger.Info("maintainer: another session holds the advisory lock; skipping",
 			"parent", label,
+			"err", errs.ErrLockContention,
 		)
-		// TODO(ADR-0010): emit partman.lock_skipped_total.
+		m.meter.Counter("partman.lock_skipped_total", 1, "parent", label)
 		return parentResultLocked
 	}
 	defer release()
@@ -339,7 +360,7 @@ func (m *Impl) processParent(ctx context.Context, p registry.ParentInfo) (result
 		"partitions_detached", len(sweep.Detached),
 		"partitions_archived", len(sweep.Archived),
 	)
-	// TODO(ADR-0010): emit partman.parents_processed_total.
+	m.meter.Counter("partman.parents_processed_total", 1, "parent", label)
 	return parentResultProcessed
 }
 

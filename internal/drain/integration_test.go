@@ -286,7 +286,10 @@ func quoteIdent(s string) string {
 
 func newDrain(t *testing.T, pool *pgxpool.Pool) *drain.Impl {
 	t.Helper()
-	d, err := drain.New(drain.Config{Pool: pool})
+	d, err := drain.New(drain.Config{
+		Pool:  pool,
+		Clock: testsupport.NewSimulatedClock(t),
+	})
 	if err != nil {
 		t.Fatalf("drain.New: %v", err)
 	}

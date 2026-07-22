@@ -15,20 +15,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jirevwe/go_partman/internal/errs"
 	"github.com/jirevwe/go_partman/internal/maintainer"
 	"github.com/jirevwe/go_partman/internal/naming"
 	parentsrepo "github.com/jirevwe/go_partman/internal/parents/repo"
 	partitionsrepo "github.com/jirevwe/go_partman/internal/partitions/repo"
+	"github.com/jirevwe/go_partman/internal/retry"
 )
 
 // ErrParentBusy is returned when the advisory lock for the parent is
-// already held by another session (Maintainer or peer Drain). Callers
-// can retry after a backoff.
-var ErrParentBusy = errors.New("drain: parent is busy")
+// already held by another session (Maintainer or peer Drain). Aliased
+// to errs.ErrLockContention so callers can use errors.Is against the
+// root sentinel.
+var ErrParentBusy = errs.ErrLockContention
 
 // ErrParentNotFound is returned when the parent is not registered in
-// the metadata schema.
-var ErrParentNotFound = errors.New("drain: parent not found")
+// the metadata schema. Aliased to errs.ErrParentNotFound.
+var ErrParentNotFound = errs.ErrParentNotFound
 
 // ParentRef identifies a registered parent by (schema, table). Mirrors
 // partman.ParentRef; the drain package keeps a local copy to avoid a
@@ -54,10 +57,40 @@ type Report struct {
 	Anomalies  []Anomaly
 }
 
+// Meter is the observability sink Drain needs. The root partman.Meter
+// satisfies it. A nil Meter turns emission off.
+type Meter interface {
+	Counter(name string, delta int64, tags ...string)
+	Histogram(name string, value float64, tags ...string)
+}
+
+type noopMeter struct{}
+
+func (noopMeter) Counter(name string, delta int64, tags ...string)     {}
+func (noopMeter) Histogram(name string, value float64, tags ...string) {}
+
+// retryPolicy returns the default policy wired to this Impl's meter so
+// retry_attempts_total / retry_exhausted_total carry the drain op tag.
+func (d *Impl) retryPolicy(op string) retry.Policy {
+	p := retry.Default()
+	p.Meter = d.meter
+	p.Op = op
+	return p
+}
+
+// Clock is the interface drain needs from a clock. Any type satisfying
+// partman.Clock (Now() time.Time) satisfies this. Drain uses it only
+// for duration histograms.
+type Clock interface {
+	Now() time.Time
+}
+
 // Config bundles the dependencies for constructing an Impl.
 type Config struct {
 	Pool   *pgxpool.Pool
 	Logger *slog.Logger
+	Meter  Meter
+	Clock  Clock
 }
 
 // Impl is the concrete drain. Exported so the Manager facade can hold a
@@ -65,6 +98,8 @@ type Config struct {
 type Impl struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
+	meter  Meter
+	clock  Clock
 }
 
 // New constructs an Impl. Pool is required; Logger defaults to
@@ -73,11 +108,39 @@ func New(cfg Config) (*Impl, error) {
 	if cfg.Pool == nil {
 		return nil, errors.New("drain: Config.Pool is required")
 	}
+	if cfg.Clock == nil {
+		return nil, errors.New("drain: Config.Clock is required")
+	}
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Impl{pool: cfg.Pool, logger: logger}, nil
+	meter := cfg.Meter
+	if meter == nil {
+		meter = noopMeter{}
+	}
+	return &Impl{pool: cfg.Pool, logger: logger, meter: meter, clock: cfg.Clock}, nil
+}
+
+// assertDefaultExists returns errs.ErrDefaultPartitionMissing when the
+// parent's default partition is absent from PostgreSQL. Drain has
+// nothing to move from a missing default; failing here surfaces the
+// state instead of a raw "relation does not exist" from a later query.
+func assertDefaultExists(ctx context.Context, conn *pgxpool.Conn, schema, name string) error {
+	var one int
+	err := conn.QueryRow(ctx, `
+		SELECT 1
+		FROM pg_class c
+		JOIN pg_namespace n ON c.relnamespace = n.oid
+		WHERE n.nspname = $1 AND c.relname = $2
+	`, schema, name).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%w: %s.%s", errs.ErrDefaultPartitionMissing, schema, name)
+	}
+	if err != nil {
+		return fmt.Errorf("drain: assert default exists: %w", err)
+	}
+	return nil
 }
 
 // PartitionData drains rows from the parent's default partition into
@@ -93,6 +156,11 @@ func New(cfg Config) (*Impl, error) {
 // (tenant, bounds) group.
 func (d *Impl) PartitionData(ctx context.Context, ref ParentRef, opts Options) (Report, error) {
 	o := opts.resolved()
+	parentLabel := ref.SchemaName + "." + ref.TableName
+	start := d.clock.Now()
+	defer func() {
+		d.meter.Histogram("partman.drain_duration_seconds", d.clock.Now().Sub(start).Seconds(), "parent", parentLabel)
+	}()
 
 	conn, err := d.pool.Acquire(ctx)
 	if err != nil {
@@ -146,6 +214,10 @@ func (d *Impl) PartitionData(ctx context.Context, ref ParentRef, opts Options) (
 		return Report{}, fmt.Errorf("drain: parent %s.%s has no non-generated columns", ref.SchemaName, ref.TableName)
 	}
 
+	if err := assertDefaultExists(ctx, conn, ref.SchemaName, defaultTable); err != nil {
+		return Report{}, err
+	}
+
 	partitions := partitionsrepo.New(conn)
 	anomalies := newAnomalyTracker()
 	report := Report{}
@@ -174,6 +246,7 @@ func (d *Impl) PartitionData(ctx context.Context, ref ParentRef, opts Options) (
 		}
 
 		report.BatchesRun++
+		d.meter.Counter("partman.drain_batches_total", 1, "parent", parentLabel)
 
 		groups, err := groupByBounds(rows, interval)
 		if err != nil {
@@ -191,7 +264,7 @@ func (d *Impl) PartitionData(ctx context.Context, ref ParentRef, opts Options) (
 				if errors.Is(err, pgx.ErrNoRows) {
 					anomalies.record(key, len(ctids))
 					d.logger.Info("drain: target partition missing; recording anomaly",
-						"parent", ref.SchemaName+"."+ref.TableName,
+						"parent", parentLabel,
 						"tenant", key.Tenant,
 						"bounds_from", key.Bounds.From,
 						"bounds_to", key.Bounds.To,
@@ -202,11 +275,17 @@ func (d *Impl) PartitionData(ctx context.Context, ref ParentRef, opts Options) (
 				return report, fmt.Errorf("drain: lookup target: %w", err)
 			}
 
-			moved, err := moveGroup(ctx, conn, ref.SchemaName, defaultTable, target.Name, cols, ctids)
+			var moved int
+			err = retry.Do(ctx, d.retryPolicy("drain-move"), func() error {
+				var e error
+				moved, e = moveGroup(ctx, conn, ref.SchemaName, defaultTable, target.Name, cols, ctids)
+				return e
+			})
 			if err != nil {
 				return report, fmt.Errorf("drain: move group: %w", err)
 			}
 			report.RowsMoved += moved
+			d.meter.Counter("partman.drain_rows_moved_total", int64(moved), "parent", parentLabel)
 		}
 	}
 
@@ -215,16 +294,17 @@ func (d *Impl) PartitionData(ctx context.Context, ref ParentRef, opts Options) (
 	}
 
 	report.Anomalies = append(report.Anomalies, anomalies.list()...)
+	if n := int64(len(report.Anomalies)); n > 0 {
+		d.meter.Counter("partman.drain_anomalies_total", n, "parent", parentLabel)
+	}
 
 	d.logger.Info("drain: complete",
-		"parent", ref.SchemaName+"."+ref.TableName,
+		"parent", parentLabel,
 		"batches_run", report.BatchesRun,
 		"rows_moved", report.RowsMoved,
 		"anomaly_count", len(report.Anomalies),
+		"duration_ms", d.clock.Now().Sub(start).Milliseconds(),
 	)
-	// TODO(ADR-0010): emit partman.drain_rows_moved_total,
-	// partman.drain_batches_total, partman.drain_anomalies_total,
-	// partman.drain_duration_seconds.
 	return report, nil
 }
 

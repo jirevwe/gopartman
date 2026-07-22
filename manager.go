@@ -187,6 +187,7 @@ func (m *Manager) initInternals() error {
 		Pool:   m.db,
 		Clock:  m.clock,
 		Logger: m.logger,
+		Meter:  m.meter,
 	})
 	if err != nil {
 		return fmt.Errorf("go_partman: init provisioner: %w", err)
@@ -198,6 +199,7 @@ func (m *Manager) initInternals() error {
 		Clock:  m.clock,
 		Hook:   m.hook,
 		Logger: m.logger,
+		Meter:  m.meter,
 	})
 	if err != nil {
 		return fmt.Errorf("go_partman: init retention: %w", err)
@@ -222,6 +224,7 @@ func (m *Manager) initInternals() error {
 		Retention:   ret,
 		Clock:       m.clock,
 		Logger:      m.logger,
+		Meter:       m.meter,
 		Schedule:    m.schedule,
 	})
 	if err != nil {
@@ -240,7 +243,9 @@ func (m *Manager) initInternals() error {
 
 	dr, err := drain.New(drain.Config{
 		Pool:   m.db,
+		Clock:  m.clock,
 		Logger: m.logger,
+		Meter:  m.meter,
 	})
 	if err != nil {
 		return fmt.Errorf("go_partman: init drain: %w", err)

@@ -15,11 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jirevwe/go_partman/internal/errs"
 	"github.com/jirevwe/go_partman/internal/hooks"
 	"github.com/jirevwe/go_partman/internal/naming"
 	parentsrepo "github.com/jirevwe/go_partman/internal/parents/repo"
 	partitionsrepo "github.com/jirevwe/go_partman/internal/partitions/repo"
-	"github.com/jirevwe/go_partman/internal/registry"
+	"github.com/jirevwe/go_partman/internal/retry"
 )
 
 // ParentRef identifies a registered parent by (schema, table). It
@@ -34,6 +35,27 @@ type ParentRef struct {
 // satisfying partman.Clock (Now() time.Time) satisfies this.
 type Clock interface {
 	Now() time.Time
+}
+
+// Meter is the observability sink Retention needs. The root
+// partman.Meter satisfies it. A nil Meter turns emission off.
+type Meter interface {
+	Counter(name string, delta int64, tags ...string)
+	Histogram(name string, value float64, tags ...string)
+}
+
+type noopMeter struct{}
+
+func (noopMeter) Counter(name string, delta int64, tags ...string)     {}
+func (noopMeter) Histogram(name string, value float64, tags ...string) {}
+
+// retryPolicy returns the default policy wired to this Impl's meter so
+// retry counters carry the retention op tag.
+func (p *Impl) retryPolicy(op string) retry.Policy {
+	pol := retry.Default()
+	pol.Meter = p.meter
+	pol.Op = op
+	return pol
 }
 
 // SweepReport summarizes one Sweep call. Considered counts the
@@ -61,6 +83,7 @@ type Config struct {
 	Clock  Clock
 	Hook   hooks.Hook
 	Logger *slog.Logger
+	Meter  Meter
 }
 
 // Impl is the concrete Retention. Exported so the Manager facade can
@@ -70,6 +93,7 @@ type Impl struct {
 	clock  Clock
 	hook   hooks.Hook
 	logger *slog.Logger
+	meter  Meter
 }
 
 // New constructs an Impl. Pool and Clock are required. Hook is
@@ -86,11 +110,16 @@ func New(cfg Config) (*Impl, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	meter := cfg.Meter
+	if meter == nil {
+		meter = noopMeter{}
+	}
 	return &Impl{
 		pool:   cfg.Pool,
 		clock:  cfg.Clock,
 		hook:   cfg.Hook,
 		logger: logger,
+		meter:  meter,
 	}, nil
 }
 
@@ -101,6 +130,11 @@ func New(cfg Config) (*Impl, error) {
 // sweep-level failures (parent load, list query) return an error.
 func (p *Impl) Sweep(ctx context.Context, parent ParentRef, opts ...SweepOption) (SweepReport, error) {
 	o := evalSweepOptions(opts)
+	parentLabel := parent.SchemaName + "." + parent.TableName
+	start := p.clock.Now()
+	defer func() {
+		p.meter.Histogram("partman.retention_duration_seconds", p.clock.Now().Sub(start).Seconds(), "parent", parentLabel)
+	}()
 
 	parents := parentsrepo.New(p.pool)
 	prow, err := parents.GetParentTable(ctx, parentsrepo.GetParentTableParams{
@@ -109,7 +143,7 @@ func (p *Impl) Sweep(ctx context.Context, parent ParentRef, opts ...SweepOption)
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return SweepReport{DryRun: o.dryRun}, fmt.Errorf("%w: %s.%s", registry.ErrParentNotFound, parent.SchemaName, parent.TableName)
+			return SweepReport{DryRun: o.dryRun}, fmt.Errorf("%w: %s.%s", errs.ErrParentNotFound, parent.SchemaName, parent.TableName)
 		}
 		return SweepReport{DryRun: o.dryRun}, fmt.Errorf("retention: load parent: %w", err)
 	}
@@ -132,12 +166,12 @@ func (p *Impl) Sweep(ctx context.Context, parent ParentRef, opts ...SweepOption)
 		ref, err := buildPartitionRef(prow.TableName, row)
 		if err != nil {
 			p.logger.Warn("retention: bad partition metadata; skipping",
-				"parent", parent.SchemaName+"."+parent.TableName,
+				"parent", parentLabel,
 				"partition_id", row.ID,
-				"name", row.Name,
+				"partition", row.Name,
 				"err", err,
 			)
-			// TODO(ADR-0010): emit partman.retention_skipped_total{reason=bad_metadata}.
+			p.meter.Counter("partman.retention_skipped_total", 1, "parent", parentLabel, "reason", "bad_metadata")
 			report.Skipped = append(report.Skipped, ref)
 			continue
 		}
@@ -149,10 +183,11 @@ func (p *Impl) Sweep(ctx context.Context, parent ParentRef, opts ...SweepOption)
 
 		if decision == hooks.HookArchive && !hasRetentionSchema(prow.RetentionSchema) {
 			p.logger.Warn("retention: HookArchive requested but retention_schema is empty",
-				"parent", parent.SchemaName+"."+parent.TableName,
+				"parent", parentLabel,
 				"partition", row.Name,
+				"err", errs.ErrArchiveSchemaMissing,
 			)
-			// TODO(ADR-0010): emit partman.retention_skipped_total{reason=missing_archive_schema}.
+			p.meter.Counter("partman.retention_skipped_total", 1, "parent", parentLabel, "reason", "missing_archive_schema")
 			report.Skipped = append(report.Skipped, ref)
 			continue
 		}
@@ -175,40 +210,43 @@ func (p *Impl) Sweep(ctx context.Context, parent ParentRef, opts ...SweepOption)
 
 		if decision == hooks.HookSkip {
 			p.logger.Debug("retention: HookSkip; leaving partition",
-				"parent", parent.SchemaName+"."+parent.TableName,
+				"parent", parentLabel,
 				"partition", row.Name,
+				"err", errs.ErrHookVetoed,
 			)
-			// TODO(ADR-0010): emit partman.retention_skipped_total{reason=hook_skip}.
+			p.meter.Counter("partman.retention_skipped_total", 1, "parent", parentLabel, "reason", "hook_skip")
 			report.Skipped = append(report.Skipped, ref)
 			continue
 		}
 
-		if err := p.applyDecision(ctx, prow, row, decision); err != nil {
+		applyErr := retry.Do(ctx, p.retryPolicy("retention-apply"), func() error {
+			return p.applyDecision(ctx, prow, row, decision)
+		})
+		if applyErr != nil {
 			p.logger.Warn("retention: partition action failed; skipping",
-				"parent", parent.SchemaName+"."+parent.TableName,
+				"parent", parentLabel,
 				"partition", row.Name,
 				"decision", decisionLabel(decision),
-				"err", err,
+				"err", applyErr,
 			)
-			// TODO(ADR-0010): emit partman.retention_skipped_total{reason=ddl_error}.
+			p.meter.Counter("partman.retention_skipped_total", 1, "parent", parentLabel, "reason", "ddl_error")
 			report.Skipped = append(report.Skipped, ref)
 			continue
 		}
 
 		switch decision {
 		case hooks.HookDrop:
-			// TODO(ADR-0010): emit partman.partitions_dropped_total.
+			p.meter.Counter("partman.partitions_dropped_total", 1, "parent", parentLabel)
 			report.Dropped = append(report.Dropped, ref)
 		case hooks.HookDetach:
-			// TODO(ADR-0010): emit partman.partitions_detached_total.
+			p.meter.Counter("partman.partitions_detached_total", 1, "parent", parentLabel)
 			report.Detached = append(report.Detached, ref)
 		case hooks.HookArchive:
-			// TODO(ADR-0010): emit partman.partitions_archived_total.
+			p.meter.Counter("partman.partitions_archived_total", 1, "parent", parentLabel)
 			report.Archived = append(report.Archived, ref)
 		}
 	}
 
-	// TODO(ADR-0010): emit partman.retention_duration_seconds.
 	return report, nil
 }
 
@@ -242,7 +280,10 @@ func (p *Impl) DropAll(ctx context.Context, schemaName, tableName string) error 
 		if !ok {
 			return fmt.Errorf("retention: unexpected FQ shape %q", row.Name)
 		}
-		if err := p.dropOne(ctx, childSchema, childTable, row.ID); err != nil {
+		err := retry.Do(ctx, p.retryPolicy("retention-drop"), func() error {
+			return p.dropOne(ctx, childSchema, childTable, row.ID)
+		})
+		if err != nil {
 			return fmt.Errorf("retention: drop %s: %w", row.Name, err)
 		}
 	}

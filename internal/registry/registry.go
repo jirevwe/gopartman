@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 
+	"github.com/jirevwe/go_partman/internal/errs"
 	"github.com/jirevwe/go_partman/internal/naming"
 	parentsrepo "github.com/jirevwe/go_partman/internal/parents/repo"
 	"github.com/jirevwe/go_partman/internal/provisioner"
@@ -141,7 +142,7 @@ func (r *Impl) RegisterParent(ctx context.Context, cfg ParentConfig) error {
 		// ON CONFLICT DO NOTHING with RETURNING yields ErrNoRows when
 		// the row already exists.
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("%w: %s.%s", ErrParentAlreadyExists, cfg.SchemaName, cfg.TableName)
+			return fmt.Errorf("%w: %s.%s", errs.ErrParentAlreadyExists, cfg.SchemaName, cfg.TableName)
 		}
 		return fmt.Errorf("partman: insert parent row: %w", err)
 	}
@@ -179,12 +180,12 @@ func (r *Impl) RegisterTenant(ctx context.Context, cfg TenantConfig) error {
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("%w: %s.%s", ErrParentNotFound, cfg.ParentSchema, cfg.ParentName)
+			return fmt.Errorf("%w: %s.%s", errs.ErrParentNotFound, cfg.ParentSchema, cfg.ParentName)
 		}
 		return fmt.Errorf("partman: load parent for tenant: %w", err)
 	}
 	if !prow.TenantColumn.Valid || prow.TenantColumn.String == "" {
-		return fmt.Errorf("%w: %s.%s", ErrParentNotTenanted, cfg.ParentSchema, cfg.ParentName)
+		return fmt.Errorf("%w: %s.%s", errs.ErrParentNotTenanted, cfg.ParentSchema, cfg.ParentName)
 	}
 
 	tenants := tenantsrepo.New(r.pool)
@@ -196,7 +197,7 @@ func (r *Impl) RegisterTenant(ctx context.Context, cfg TenantConfig) error {
 		return fmt.Errorf("partman: insert tenant row: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: %s under %s.%s", ErrTenantAlreadyExists, cfg.TenantId, cfg.ParentSchema, cfg.ParentName)
+		return fmt.Errorf("%w: %s under %s.%s", errs.ErrTenantAlreadyExists, cfg.TenantId, cfg.ParentSchema, cfg.ParentName)
 	}
 
 	if _, err := r.provisioner.EnsurePartitions(ctx, provisioner.ParentRef{
@@ -304,7 +305,7 @@ func (r *Impl) ListTenants(ctx context.Context, ref ParentRef) ([]TenantInfo, er
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("%w: %s.%s", ErrParentNotFound, ref.SchemaName, ref.TableName)
+			return nil, fmt.Errorf("%w: %s.%s", errs.ErrParentNotFound, ref.SchemaName, ref.TableName)
 		}
 		return nil, fmt.Errorf("partman: load parent for list tenants: %w", err)
 	}

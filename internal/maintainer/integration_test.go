@@ -273,6 +273,126 @@ func TestMaintain_TwoMaintainersOneDB_OnlyOneProcessesEachParent(t *testing.T) {
 	}
 }
 
+// TestMaintain_EmitsAllDocumentedMetrics wires a captureMeter through
+// registry, provisioner, retention, and maintainer. It runs one full
+// maintenance pass over a parent whose registration created bounded
+// partitions past retention, forcing every path to fire at least once:
+// provisioner (create + duration), retention (drop + duration), and
+// maintainer (run + duration + processed).
+func TestMaintain_EmitsAllDocumentedMetrics(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	meter := testsupport.NewCaptureMeter()
+
+	regClock := partman.NewSimulatedClock(time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC))
+	f := createParentWithMeter(t, pool, regClock, meter)
+
+	// Move to a time where the initial 2026-04-01 partition is past
+	// the 30-day retention cutoff.
+	maintClock := partman.NewSimulatedClock(time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
+	m := newMaintainerWithMeter(t, pool, maintClock, time.Hour, meter)
+
+	if err := m.Maintain(t.Context()); err != nil {
+		t.Fatalf("Maintain: %v", err)
+	}
+
+	want := []string{
+		"partman.partitions_created_total",
+		"partman.default_partitions_created_total",
+		"partman.provisioner_duration_seconds",
+		"partman.partitions_dropped_total",
+		"partman.retention_duration_seconds",
+		"partman.maintenance_runs_total",
+		"partman.maintenance_duration_seconds",
+		"partman.parents_processed_total",
+	}
+	for _, name := range want {
+		if !meter.Fired(name) {
+			t.Errorf("metric %s did not fire", name)
+		}
+	}
+	_ = f
+}
+
+func createParentWithMeter(t *testing.T, pool *pgxpool.Pool, clock partman.Clock, meter *testsupport.CaptureMeter) parentFixture {
+	t.Helper()
+	ctx := t.Context()
+
+	schema := "maint_" + strings.ToLower(ulid.Make().String())
+	table := "events"
+	if _, err := pool.Exec(ctx, "CREATE SCHEMA "+quoteIdent(schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	ddl := fmt.Sprintf(
+		`CREATE TABLE %s.%s (id BIGSERIAL, created_at TIMESTAMPTZ NOT NULL) PARTITION BY RANGE (created_at)`,
+		quoteIdent(schema), quoteIdent(table),
+	)
+	if _, err := pool.Exec(ctx, ddl); err != nil {
+		t.Fatalf("create parent table: %v", err)
+	}
+
+	prov, err := provisioner.New(provisioner.Config{Pool: pool, Clock: clock, Meter: meter})
+	if err != nil {
+		t.Fatalf("provisioner.New: %v", err)
+	}
+	ret, err := retention.New(retention.Config{Pool: pool, Clock: clock, Meter: meter})
+	if err != nil {
+		t.Fatalf("retention.New: %v", err)
+	}
+	reg, err := registry.New(registry.Config{
+		Pool:        pool,
+		Provisioner: prov,
+		Dropper:     retentionDropperAdapter{r: ret},
+	})
+	if err != nil {
+		t.Fatalf("registry.New: %v", err)
+	}
+	if err := reg.RegisterParent(ctx, registry.ParentConfig{
+		SchemaName:        schema,
+		TableName:         table,
+		PartitionBy:       "created_at",
+		PartitionInterval: 24 * time.Hour,
+		Premake:           1,
+		RetentionPeriod:   30 * 24 * time.Hour,
+	}); err != nil {
+		t.Fatalf("RegisterParent: %v", err)
+	}
+	return parentFixture{Schema: schema, Table: table}
+}
+
+func newMaintainerWithMeter(t *testing.T, pool *pgxpool.Pool, clock partman.Clock, schedule time.Duration, meter *testsupport.CaptureMeter) *maintainer.Impl {
+	t.Helper()
+	prov, err := provisioner.New(provisioner.Config{Pool: pool, Clock: clock, Meter: meter})
+	if err != nil {
+		t.Fatalf("provisioner.New: %v", err)
+	}
+	ret, err := retention.New(retention.Config{Pool: pool, Clock: clock, Meter: meter})
+	if err != nil {
+		t.Fatalf("retention.New: %v", err)
+	}
+	reg, err := registry.New(registry.Config{
+		Pool:        pool,
+		Provisioner: prov,
+		Dropper:     retentionDropperAdapter{r: ret},
+	})
+	if err != nil {
+		t.Fatalf("registry.New: %v", err)
+	}
+	m, err := maintainer.New(maintainer.Config{
+		Pool:        pool,
+		Registry:    reg,
+		Provisioner: prov,
+		Retention:   ret,
+		Clock:       clock,
+		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Meter:       meter,
+		Schedule:    schedule,
+	})
+	if err != nil {
+		t.Fatalf("maintainer.New: %v", err)
+	}
+	return m
+}
+
 func TestStart_Then_Stop_HonorsCtxDeadline(t *testing.T) {
 	pool, _ := testsupport.NewPG(t)
 	clk := partman.NewSimulatedClock(time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC))

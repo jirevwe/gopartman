@@ -24,6 +24,7 @@ import (
 	"github.com/jirevwe/go_partman/internal/naming"
 	parentsrepo "github.com/jirevwe/go_partman/internal/parents/repo"
 	partitionsrepo "github.com/jirevwe/go_partman/internal/partitions/repo"
+	"github.com/jirevwe/go_partman/internal/retry"
 )
 
 // ParentRef identifies a registered parent by (schema, table). It
@@ -52,6 +53,18 @@ type Clock interface {
 	Now() time.Time
 }
 
+// Meter is the observability sink provisioner needs. The root
+// partman.Meter satisfies it. A nil Meter turns emission off.
+type Meter interface {
+	Counter(name string, delta int64, tags ...string)
+	Histogram(name string, value float64, tags ...string)
+}
+
+type noopMeter struct{}
+
+func (noopMeter) Counter(name string, delta int64, tags ...string)     {}
+func (noopMeter) Histogram(name string, value float64, tags ...string) {}
+
 // Provisioner is the seam through which Registry and Maintainer create
 // partitions.
 type Provisioner interface {
@@ -63,6 +76,7 @@ type Config struct {
 	Pool   *pgxpool.Pool
 	Clock  Clock
 	Logger *slog.Logger
+	Meter  Meter
 }
 
 // Impl is the concrete Provisioner. Exported so the Manager facade can
@@ -72,6 +86,7 @@ type Impl struct {
 	pool   *pgxpool.Pool
 	clock  Clock
 	logger *slog.Logger
+	meter  Meter
 }
 
 // New constructs an Impl. Pool and Clock are required; Logger defaults
@@ -87,10 +102,15 @@ func New(cfg Config) (*Impl, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	meter := cfg.Meter
+	if meter == nil {
+		meter = noopMeter{}
+	}
 	return &Impl{
 		pool:   cfg.Pool,
 		clock:  cfg.Clock,
 		logger: logger,
+		meter:  meter,
 	}, nil
 }
 
@@ -100,6 +120,11 @@ func New(cfg Config) (*Impl, error) {
 // metadata writes run in one transaction; on error the whole call
 // rolls back and the next call retries the full set.
 func (p *Impl) EnsurePartitions(ctx context.Context, parent ParentRef, tenant *TenantRef) (EnsureReport, error) {
+	parentLabel := parent.SchemaName + "." + parent.TableName
+	start := p.clock.Now()
+	defer func() {
+		p.meter.Histogram("partman.provisioner_duration_seconds", p.clock.Now().Sub(start).Seconds(), "parent", parentLabel)
+	}()
 	parents := parentsrepo.New(p.pool)
 	prow, err := parents.GetParentTable(ctx, parentsrepo.GetParentTableParams{
 		SchemaName: parent.SchemaName,
@@ -157,9 +182,39 @@ func (p *Impl) EnsurePartitions(ctx context.Context, parent ParentRef, tenant *T
 		return EnsureReport{}, nil
 	}
 
+	if err := retry.Do(ctx, p.retryPolicy("provisioner-ensure"), func() error {
+		return p.createInTx(ctx, prow, tenant, toCreate, needDefault, k)
+	}); err != nil {
+		return EnsureReport{}, err
+	}
+	if n := int64(len(toCreate)); n > 0 {
+		p.meter.Counter("partman.partitions_created_total", n, "parent", parentLabel)
+	}
+	if needDefault {
+		p.meter.Counter("partman.default_partitions_created_total", 1, "parent", parentLabel)
+	}
+	return EnsureReport{
+		BoundedCreated: len(toCreate),
+		DefaultCreated: needDefault,
+	}, nil
+}
+
+// createInTx creates every entry in toCreate plus the default when
+// needDefault is true, all inside a single transaction. It is called
+// from EnsurePartitions via retry.Do; on a transient PostgreSQL error
+// (serialization failure, deadlock, connection blip) the tx aborts and
+// retry.Do re-invokes this function on a fresh tx.
+func (p *Impl) createInTx(
+	ctx context.Context,
+	prow parentsrepo.PartmanParentTable,
+	tenant *TenantRef,
+	toCreate []naming.Bounds,
+	needDefault bool,
+	k kind,
+) error {
 	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return EnsureReport{}, fmt.Errorf("provisioner: begin tx: %w", err)
+		return fmt.Errorf("provisioner: begin tx: %w", err)
 	}
 	defer func() {
 		// pgx.ErrTxClosed is expected after a successful commit; ignore.
@@ -186,15 +241,15 @@ func (p *Impl) EnsurePartitions(ctx context.Context, parent ParentRef, tenant *T
 		}
 		fq, err := tn.Build()
 		if err != nil {
-			return EnsureReport{}, fmt.Errorf("provisioner: build partition name: %w", err)
+			return fmt.Errorf("provisioner: build partition name: %w", err)
 		}
 		childSchema, childTable, ok := splitFQ(fq)
 		if !ok {
-			return EnsureReport{}, fmt.Errorf("provisioner: unexpected FQ shape %q", fq)
+			return fmt.Errorf("provisioner: unexpected FQ shape %q", fq)
 		}
 		ddl := buildBoundedPartitionDDL(prow.SchemaName, prow.TableName, childSchema, childTable, tenantIdStr, b)
 		if _, err := tx.Exec(ctx, ddl); err != nil {
-			return EnsureReport{}, fmt.Errorf("provisioner: create bounded partition %s: %w", fq, err)
+			return fmt.Errorf("provisioner: create bounded partition %s: %w", fq, err)
 		}
 		if err := txPartitions.UpsertPartition(ctx, partitionsrepo.UpsertPartitionParams{
 			ID:                  ulid.Make().String(),
@@ -207,7 +262,7 @@ func (p *Impl) EnsurePartitions(ctx context.Context, parent ParentRef, tenant *T
 			PartitionBoundsTo:   pgtype.Timestamptz{Time: b.To, Valid: true},
 			IsDefault:           false,
 		}); err != nil {
-			return EnsureReport{}, fmt.Errorf("provisioner: upsert bounded metadata %s: %w", fq, err)
+			return fmt.Errorf("provisioner: upsert bounded metadata %s: %w", fq, err)
 		}
 	}
 
@@ -221,15 +276,15 @@ func (p *Impl) EnsurePartitions(ctx context.Context, parent ParentRef, tenant *T
 		}
 		fq, err := tn.Build()
 		if err != nil {
-			return EnsureReport{}, fmt.Errorf("provisioner: build default name: %w", err)
+			return fmt.Errorf("provisioner: build default name: %w", err)
 		}
 		childSchema, childTable, ok := splitFQ(fq)
 		if !ok {
-			return EnsureReport{}, fmt.Errorf("provisioner: unexpected FQ shape %q", fq)
+			return fmt.Errorf("provisioner: unexpected FQ shape %q", fq)
 		}
 		ddl := buildDefaultPartitionDDL(prow.SchemaName, prow.TableName, childSchema, childTable)
 		if _, err := tx.Exec(ctx, ddl); err != nil {
-			return EnsureReport{}, fmt.Errorf("provisioner: create default partition %s: %w", fq, err)
+			return fmt.Errorf("provisioner: create default partition %s: %w", fq, err)
 		}
 		// bounds_from/to are NOT NULL columns; use the epoch as a
 		// visually obvious sentinel for the default.
@@ -245,19 +300,23 @@ func (p *Impl) EnsurePartitions(ctx context.Context, parent ParentRef, tenant *T
 			PartitionBoundsTo:   pgtype.Timestamptz{Time: epoch, Valid: true},
 			IsDefault:           true,
 		}); err != nil {
-			return EnsureReport{}, fmt.Errorf("provisioner: upsert default metadata %s: %w", fq, err)
+			return fmt.Errorf("provisioner: upsert default metadata %s: %w", fq, err)
 		}
 	}
 
-	// TODO(ADR-0010): emit partman.partitions_created_total and
-	// partman.default_partitions_created_total via the Meter.
 	if err := tx.Commit(ctx); err != nil {
-		return EnsureReport{}, fmt.Errorf("provisioner: commit: %w", err)
+		return fmt.Errorf("provisioner: commit: %w", err)
 	}
-	return EnsureReport{
-		BoundedCreated: len(toCreate),
-		DefaultCreated: needDefault,
-	}, nil
+	return nil
+}
+
+// retryPolicy returns the default policy wired to this Impl's meter so
+// retry counters carry the provisioner op tag.
+func (p *Impl) retryPolicy(op string) retry.Policy {
+	pol := retry.Default()
+	pol.Meter = p.meter
+	pol.Op = op
+	return pol
 }
 
 type boundsKey struct {

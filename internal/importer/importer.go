@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 
+	"github.com/jirevwe/go_partman/internal/errs"
 	"github.com/jirevwe/go_partman/internal/hooks"
 	"github.com/jirevwe/go_partman/internal/naming"
 	parentsrepo "github.com/jirevwe/go_partman/internal/parents/repo"
 	partitionsrepo "github.com/jirevwe/go_partman/internal/partitions/repo"
-	"github.com/jirevwe/go_partman/internal/registry"
 	tenantsrepo "github.com/jirevwe/go_partman/internal/tenants/repo"
 )
 
@@ -112,7 +112,7 @@ func (i *Impl) Import(ctx context.Context, ref ParentRef) (ReconcileReport, erro
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ReconcileReport{}, registry.ErrParentNotFound
+			return ReconcileReport{}, fmt.Errorf("%w: %s.%s", errs.ErrParentNotFound, ref.SchemaName, ref.TableName)
 		}
 		return ReconcileReport{}, fmt.Errorf("importer: load parent: %w", err)
 	}
@@ -139,7 +139,7 @@ func (i *Impl) Import(ctx context.Context, ref ParentRef) (ReconcileReport, erro
 		if !intervalMatches(kind, pb.Bounds) {
 			return ReconcileReport{}, fmt.Errorf(
 				"%w: child %s has bound %s but parent %s.%s is %s",
-				registry.ErrIntervalMismatch, c.fq(), c.BoundExpr,
+				errs.ErrIntervalMismatch, c.fq(), c.BoundExpr,
 				ref.SchemaName, ref.TableName, prow.PartitionInterval,
 			)
 		}
