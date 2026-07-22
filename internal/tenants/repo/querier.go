@@ -9,7 +9,10 @@ import (
 )
 
 type Querier interface {
+	DeleteTenant(ctx context.Context, arg DeleteTenantParams) (int64, error)
 	GetTenants(ctx context.Context, arg GetTenantsParams) ([]GetTenantsRow, error)
+	ListTenantsForParent(ctx context.Context, parentTableID string) ([]PartmanTenant, error)
+	UpsertTenant(ctx context.Context, arg UpsertTenantParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

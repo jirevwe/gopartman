@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	DeleteParentTable(ctx context.Context, arg DeleteParentTableParams) (int64, error)
 	GetParentTable(ctx context.Context, arg GetParentTableParams) (PartmanParentTable, error)
 	ListParentTables(ctx context.Context) ([]PartmanParentTable, error)
 	UpdateAutomaticMaintenance(ctx context.Context, arg UpdateAutomaticMaintenanceParams) error

@@ -142,6 +142,28 @@ func (TableName) Parse(fqName string) (TableName, error) {
 	return tn, nil
 }
 
+// PartitionIntervalLabel maps a supported partition-interval constant
+// to its canonical string label used in
+// partman.parent_tables.partition_interval. Registry (ADR-0005) writes
+// the label; Provisioner reads it back.
+//
+// Only the four exported interval constants are accepted. Any other
+// duration returns an error.
+func PartitionIntervalLabel(d time.Duration) (string, error) {
+	switch d {
+	case PartitionHourInterval:
+		return "hourly", nil
+	case PartitionDayInterval:
+		return "daily", nil
+	case PartitionWeekInterval:
+		return "weekly", nil
+	case PartitionMonthInterval:
+		return "monthly", nil
+	default:
+		return "", fmt.Errorf("partman: unsupported partition interval %s; use one of the PartitionXInterval constants", d)
+	}
+}
+
 func isUpperAlphanumeric(s string) bool {
 	if s == "" {
 		return false

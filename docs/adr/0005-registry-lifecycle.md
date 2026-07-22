@@ -1,7 +1,7 @@
 # ADR 0005 — Registry lifecycle
 
 - **Epic**: E3
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: 0001, 0002, 0004
 - **Blocks**: 0007
 

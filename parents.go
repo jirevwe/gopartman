@@ -1,46 +1,28 @@
 package go_partman
 
-import "time"
+import "github.com/jirevwe/go_partman/internal/registry"
 
 // ParentConfig describes a partitioned parent table to register with
-// RegisterParent. The library reads the shape at registration time and
-// creates the default partition. The user must have created the parent
-// table itself.
-type ParentConfig struct {
-	SchemaName         string
-	TableName          string
-	TenantColumn       string
-	PartitionBy        string
-	PartitionType      string
-	PartitionInterval  time.Duration
-	Premake            int
-	RetentionPeriod    time.Duration
-	RetentionSchema    string
-	RetentionKeepTable bool
-}
+// RegisterParent. Aliased from internal/registry.
+type ParentConfig = registry.ParentConfig
 
-// ParentRef identifies a registered parent by (schema, table).
-type ParentRef struct {
-	SchemaName string
-	TableName  string
-}
+// ParentRef identifies a registered parent by (schema, table). Aliased
+// from internal/registry.
+type ParentRef = registry.ParentRef
+
+// ParentInfo is the read-only view returned by Manager.ListParents.
+type ParentInfo = registry.ParentInfo
 
 // RemoveOption tunes the behavior of RemoveParent.
-type RemoveOption func(*removeOptions)
-
-type removeOptions struct {
-	cascadeDrop bool
-}
+type RemoveOption = registry.RemoveOption
 
 // WithCascadeDrop makes RemoveParent drop child partitions as part of
 // removal instead of leaving them in place.
-func WithCascadeDrop() RemoveOption {
-	return func(o *removeOptions) { o.cascadeDrop = true }
-}
+var WithCascadeDrop = registry.WithCascadeDrop
 
 // ReconcileReport summarizes what ImportExisting inserted into the
 // metadata schema. Anomalies is a list of conditions the operation
-// detected but could not resolve.
+// detected but could not resolve. ADR-0008 fills this in.
 type ReconcileReport struct {
 	ParentsAdded    int
 	TenantsAdded    int

@@ -11,6 +11,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteParentTable = `-- name: DeleteParentTable :execrows
+DELETE
+FROM partman.parent_tables
+WHERE schema_name = $1
+  AND table_name = $2
+`
+
+type DeleteParentTableParams struct {
+	SchemaName string
+	TableName  string
+}
+
+func (q *Queries) DeleteParentTable(ctx context.Context, arg DeleteParentTableParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteParentTable, arg.SchemaName, arg.TableName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getParentTable = `-- name: GetParentTable :one
 SELECT id, schema_name, table_name, tenant_column, partition_by, partition_type, partition_interval, retention_period, retention_keep_table, retention_schema, automatic_maintenance, premake, created_at, updated_at
 FROM partman.parent_tables

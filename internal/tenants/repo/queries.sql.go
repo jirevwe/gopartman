@@ -9,6 +9,26 @@ import (
 	"context"
 )
 
+const deleteTenant = `-- name: DeleteTenant :execrows
+DELETE
+FROM partman.tenants
+WHERE parent_table_id = $1
+  AND id = $2
+`
+
+type DeleteTenantParams struct {
+	ParentTableID string
+	ID            string
+}
+
+func (q *Queries) DeleteTenant(ctx context.Context, arg DeleteTenantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTenant, arg.ParentTableID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getTenants = `-- name: GetTenants :many
 SELECT t.id as tenant_id, pt.id as parent_table_id
 FROM partman.tenants t
@@ -46,4 +66,50 @@ func (q *Queries) GetTenants(ctx context.Context, arg GetTenantsParams) ([]GetTe
 		return nil, err
 	}
 	return items, nil
+}
+
+const listTenantsForParent = `-- name: ListTenantsForParent :many
+SELECT id, parent_table_id, created_at
+FROM partman.tenants
+WHERE parent_table_id = $1
+ORDER BY id
+`
+
+func (q *Queries) ListTenantsForParent(ctx context.Context, parentTableID string) ([]PartmanTenant, error) {
+	rows, err := q.db.Query(ctx, listTenantsForParent, parentTableID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PartmanTenant
+	for rows.Next() {
+		var i PartmanTenant
+		if err := rows.Scan(&i.ID, &i.ParentTableID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertTenant = `-- name: UpsertTenant :execrows
+INSERT INTO partman.tenants (id, parent_table_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type UpsertTenantParams struct {
+	ID            string
+	ParentTableID string
+}
+
+func (q *Queries) UpsertTenant(ctx context.Context, arg UpsertTenantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertTenant, arg.ID, arg.ParentTableID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

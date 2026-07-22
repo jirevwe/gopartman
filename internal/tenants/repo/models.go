@@ -3,3 +3,13 @@
 //   sqlc v1.30.0
 
 package repo
+
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type PartmanTenant struct {
+	ID            string
+	ParentTableID string
+	CreatedAt     pgtype.Timestamptz
+}

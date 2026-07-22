@@ -1,7 +1,7 @@
 # ADR 0004 — Provisioner: create partitions and the default
 
 - **Epic**: E2
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: 0001, 0002, 0003
 - **Blocks**: 0005, 0007, 0009
 

@@ -1,11 +1,6 @@
 package go_partman
 
-import (
-	"fmt"
-	"time"
-
-	"github.com/jirevwe/go_partman/internal/naming"
-)
+import "github.com/jirevwe/go_partman/internal/naming"
 
 // Partition-interval sentinels. Three of these are honest durations
 // (hourly, daily, weekly). PartitionMonthInterval is NOT arithmetically
@@ -47,17 +42,4 @@ type Tenant struct {
 //
 // Only the four exported interval constants are accepted. Any other
 // duration returns an error.
-func PartitionIntervalLabel(d time.Duration) (string, error) {
-	switch d {
-	case PartitionHourInterval:
-		return "hourly", nil
-	case PartitionDayInterval:
-		return "daily", nil
-	case PartitionWeekInterval:
-		return "weekly", nil
-	case PartitionMonthInterval:
-		return "monthly", nil
-	default:
-		return "", fmt.Errorf("partman: unsupported partition interval %s; use one of the PartitionXInterval constants", d)
-	}
-}
+var PartitionIntervalLabel = naming.PartitionIntervalLabel

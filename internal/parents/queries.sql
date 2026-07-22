@@ -37,3 +37,9 @@ UPDATE partman.parent_tables
 SET automatic_maintenance = @automatic_maintenance,
     updated_at            = CURRENT_TIMESTAMP
 WHERE id = @id;
+
+-- name: DeleteParentTable :execrows
+DELETE
+FROM partman.parent_tables
+WHERE schema_name = @schema_name
+  AND table_name = @table_name;

@@ -1,7 +1,7 @@
 # ADR 0002 — Metadata schema extension
 
 - **Epic**: E1b
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: 0000
 - **Blocks**: 0004, 0005, 0006, 0007, 0008
 

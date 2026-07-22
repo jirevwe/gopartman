@@ -33,6 +33,9 @@ func New(opts ...Option) (*Manager, error) {
 	if m.clock == nil {
 		return nil, fmt.Errorf("go_partman: WithClock is required")
 	}
+	if err := m.initInternals(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 

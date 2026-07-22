@@ -1,7 +1,7 @@
 # ADR 0001 — Public API skeleton and package layout
 
 - **Epic**: E1a
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: 0000
 - **Blocks**: 0004, 0005, 0006, 0007
 
