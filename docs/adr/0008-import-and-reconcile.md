@@ -1,7 +1,7 @@
 # ADR 0008 — Import and reconcile existing partitions
 
 - **Epic**: E6
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: 0001, 0002, 0004
 - **Blocks**: none
 

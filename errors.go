@@ -13,4 +13,5 @@ var (
 	ErrColumnMissing        = registry.ErrColumnMissing
 	ErrParentNotTenanted    = registry.ErrParentNotTenanted
 	ErrArchiveSchemaMissing = registry.ErrArchiveSchemaMissing
+	ErrIntervalMismatch     = registry.ErrIntervalMismatch
 )

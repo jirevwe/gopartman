@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jirevwe/go_partman/internal/importer"
 	"github.com/jirevwe/go_partman/internal/maintainer"
 	"github.com/jirevwe/go_partman/internal/provisioner"
 	"github.com/jirevwe/go_partman/internal/registry"
@@ -33,6 +34,7 @@ type Manager struct {
 	registry    registry.Registry
 	retention   *retention.Impl
 	maintainer  maintainer.Maintainer
+	importer    *importer.Impl
 }
 
 // retentionDropperAdapter satisfies registry.PartitionDropper by
@@ -96,9 +98,48 @@ func (m *Manager) ListTenants(ctx context.Context, ref ParentRef) ([]TenantInfo,
 }
 
 // ImportExisting reconciles PostgreSQL state into the metadata schema
-// for a parent that already exists. ADR-0008 wires the implementation.
-func (*Manager) ImportExisting(_ context.Context, _ ParentRef) (ReconcileReport, error) {
-	return ReconcileReport{}, errors.ErrUnsupported
+// for a parent that already exists. See ADR-0008.
+func (m *Manager) ImportExisting(ctx context.Context, ref ParentRef) (ReconcileReport, error) {
+	rep, err := m.importer.Import(ctx, importer.ParentRef{
+		SchemaName: ref.SchemaName,
+		TableName:  ref.TableName,
+	})
+	if err != nil {
+		return ReconcileReport{}, err
+	}
+	return ReconcileReport{
+		Imported: rep.Imported,
+		Drifted:  convertDrifted(rep.Drifted),
+		Orphaned: rep.Orphaned,
+		Skipped:  convertSkipped(rep.Skipped),
+	}, nil
+}
+
+func convertDrifted(in []importer.DriftedPartition) []DriftedPartition {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]DriftedPartition, len(in))
+	for i, d := range in {
+		out[i] = DriftedPartition{
+			Name:        d.Name,
+			NameBounds:  d.NameBounds,
+			ActualBound: d.ActualBound,
+			Reason:      d.Reason,
+		}
+	}
+	return out
+}
+
+func convertSkipped(in []importer.SkippedPartition) []SkippedPartition {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]SkippedPartition, len(in))
+	for i, s := range in {
+		out[i] = SkippedPartition{Name: s.Name, Reason: s.Reason}
+	}
+	return out
 }
 
 // PartitionData drains rows from the default partition into the
@@ -157,5 +198,14 @@ func (m *Manager) initInternals() error {
 		return fmt.Errorf("go_partman: init maintainer: %w", err)
 	}
 	m.maintainer = maint
+
+	imp, err := importer.New(importer.Config{
+		Pool:   m.db,
+		Logger: m.logger,
+	})
+	if err != nil {
+		return fmt.Errorf("go_partman: init importer: %w", err)
+	}
+	m.importer = imp
 	return nil
 }

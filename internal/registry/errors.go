@@ -14,4 +14,5 @@ var (
 	ErrColumnMissing        = errors.New("partman: required column missing on target table")
 	ErrParentNotTenanted    = errors.New("partman: parent has no tenant column")
 	ErrArchiveSchemaMissing = errors.New("partman: retention schema does not exist")
+	ErrIntervalMismatch     = errors.New("partman: partition interval mismatch")
 )

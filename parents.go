@@ -20,12 +20,33 @@ type RemoveOption = registry.RemoveOption
 // removal instead of leaving them in place.
 var WithCascadeDrop = registry.WithCascadeDrop
 
-// ReconcileReport summarizes what ImportExisting inserted into the
-// metadata schema. Anomalies is a list of conditions the operation
-// detected but could not resolve. ADR-0008 fills this in.
+// ReconcileReport summarizes what ImportExisting observed and inserted.
+// Imported lists partitions whose metadata was newly written on this
+// call. Drifted lists partitions whose child name disagrees with the
+// PG-side bound expression. Orphaned lists metadata rows with no
+// matching PG child. Skipped lists PG children whose names do not
+// match TableName.Build's format. See ADR-0008.
 type ReconcileReport struct {
-	ParentsAdded    int
-	TenantsAdded    int
-	PartitionsAdded int
-	Anomalies       []string
+	Imported []PartitionRef
+	Drifted  []DriftedPartition
+	Orphaned []PartitionRef
+	Skipped  []SkippedPartition
+}
+
+// DriftedPartition records disagreement between what the child's NAME
+// says (the parsed bound) and what PG's pg_get_expr says (the actual
+// bound). ImportExisting does NOT rewrite drifted partitions; the
+// operator inspects the report.
+type DriftedPartition struct {
+	Name        string
+	NameBounds  Bounds
+	ActualBound string // raw pg_get_expr(relpartbound) output
+	Reason      string
+}
+
+// SkippedPartition records a PG child that could not be imported. Reason
+// is a short human-readable string, e.g. "non-conforming name".
+type SkippedPartition struct {
+	Name   string
+	Reason string
 }
