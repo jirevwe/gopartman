@@ -1,7 +1,7 @@
 # ADR 0010 — Observability, typed errors, retry policy
 
 - **Epic**: E8
-- **Status**: Accepted
+- **Status**: Implemented (commit `8fa1a33`)
 - **Depends on**: 0001, 0004, 0005, 0006, 0007
 - **Blocks**: 0011
 

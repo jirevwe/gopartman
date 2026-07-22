@@ -1,7 +1,7 @@
 # ADR 0007 — Maintainer, scheduler, and advisory lock
 
 - **Epic**: E5
-- **Status**: Accepted
+- **Status**: Implemented (commit `1b6f37b`)
 - **Depends on**: 0001, 0004, 0005, 0006
 - **Blocks**: 0008, 0009
 

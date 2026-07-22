@@ -25,20 +25,20 @@ an ADR. To supersede an ADR, add a new one and cross-link.
 
 ## Index
 
-| ID | Title | Epic | Status |
-|---|---|---|---|
-| 0000 | [Domain language and ADR conventions](0000-domain-language-and-adr-conventions.md) | E0 | Accepted |
-| 0001 | [Public API skeleton and package layout](0001-public-api-skeleton.md) | E1a | Accepted |
-| 0002 | [Metadata schema extension](0002-metadata-schema-extension.md) | E1b | Accepted |
-| 0003 | [Integration test harness](0003-integration-test-harness.md) | E1c | Accepted |
-| 0004 | [Provisioner — create partitions and default](0004-provisioner-create-partitions.md) | E2 | Accepted |
-| 0005 | [Registry lifecycle](0005-registry-lifecycle.md) | E3 | Accepted |
-| 0006 | [Retention drop-or-detach with Hook](0006-retention-drop-or-detach.md) | E4 | Accepted |
-| 0007 | [Maintainer + scheduler + advisory lock](0007-maintainer-scheduler-advisory-lock.md) | E5 | Accepted |
-| 0008 | [Import and reconcile existing partitions](0008-import-and-reconcile.md) | E6 | Proposed |
-| 0009 | [`partition_data` helper — drain the default](0009-partition-data-drain.md) | E7 | Proposed |
-| 0010 | [Observability, typed errors, retry policy](0010-observability-errors-retry.md) | E8 | Proposed |
-| 0011 | [Docs, examples, and README refresh](0011-docs-examples-readme.md) | E9 | Proposed |
+| ID | Title | Epic | Status | Commit |
+|---|---|---|---|---|
+| 0000 | [Domain language and ADR conventions](0000-domain-language-and-adr-conventions.md) | E0 | Accepted | — |
+| 0001 | [Public API skeleton and package layout](0001-public-api-skeleton.md) | E1a | Implemented | `8d426b0` |
+| 0002 | [Metadata schema extension](0002-metadata-schema-extension.md) | E1b | Implemented | `3212d81` |
+| 0003 | [Integration test harness](0003-integration-test-harness.md) | E1c | Implemented | `fb16ec1` |
+| 0004 | [Provisioner — create partitions and default](0004-provisioner-create-partitions.md) | E2 | Implemented | `f523e04` |
+| 0005 | [Registry lifecycle](0005-registry-lifecycle.md) | E3 | Implemented | `2be9dfe` |
+| 0006 | [Retention drop-or-detach with Hook](0006-retention-drop-or-detach.md) | E4 | Implemented | `f53e4d7` |
+| 0007 | [Maintainer + scheduler + advisory lock](0007-maintainer-scheduler-advisory-lock.md) | E5 | Implemented | `1b6f37b` |
+| 0008 | [Import and reconcile existing partitions](0008-import-and-reconcile.md) | E6 | Implemented | `ac01c70` |
+| 0009 | [`partition_data` helper — drain the default](0009-partition-data-drain.md) | E7 | Implemented | `b6c217a` |
+| 0010 | [Observability, typed errors, retry policy](0010-observability-errors-retry.md) | E8 | Implemented | `8fa1a33` |
+| 0011 | [Docs, examples, and README refresh](0011-docs-examples-readme.md) | E9 | Implemented | this PR |
 
 ## Related files
 

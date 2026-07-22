@@ -1,7 +1,7 @@
 # ADR 0011 — Docs, examples, and README refresh
 
 - **Epic**: E9
-- **Status**: Proposed
+- **Status**: Implemented (this PR)
 - **Depends on**: 0010
 - **Blocks**: none
 

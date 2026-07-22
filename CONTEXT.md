@@ -166,6 +166,112 @@ batch. It is safe to interrupt.
 - Not to be confused with: **Detach** and **Drop** (drain moves rows;
   the retention sweep removes tables).
 
+## Public API surface
+
+Every exported name in the root `go_partman` package. One sentence per
+name. Details of each concept live above in the glossary; this section
+maps names to concepts.
+
+### Facade and construction
+
+- **`Manager`** — the facade. Composes Registry, Provisioner,
+  Retention, Maintainer, Importer, and Drain. See `manager.go`.
+- **`New(opts ...Option) (*Manager, error)`** — the only constructor.
+  Requires `WithDB` and `WithClock`.
+- **`Option`** — the functional-option type accepted by `New`.
+- **`WithDB(*pgxpool.Pool)`** — supplies the pool. Required.
+- **`WithClock(Clock)`** — supplies the clock. Required.
+- **`WithLogger(*slog.Logger)`** — optional; defaults to
+  `slog.Default()`.
+- **`WithHook(Hook)`** — installs the global pre-drop hook.
+- **`WithScheduleInterval(time.Duration)`** — sets the maintenance
+  tick interval. Default is 1 hour.
+- **`WithMeter(Meter)`** — installs the observability sink. Default
+  is `NoopMeter{}`.
+
+### Clock
+
+- **`Clock`** — interface with one method, `Now() time.Time`.
+- **`RealClock`** — wraps `time.Now`.
+- **`NewRealClock()`** — constructor.
+- **`SimulatedClock`** — concurrency-safe test clock with
+  `SetTime` and `AdvanceTime`.
+- **`NewSimulatedClock(t)`** — constructor.
+
+### Parents and tenants
+
+- **`ParentConfig`** — describes a parent for `RegisterParent`.
+- **`ParentRef`** — identifies a registered parent by
+  `(schema, table)`.
+- **`ParentInfo`** — read-only view returned by `ListParents`.
+- **`TenantConfig`** — describes a tenant for `RegisterTenant`.
+- **`TenantRef`** — identifies a registered tenant.
+- **`TenantInfo`** — read-only view returned by `ListTenants`.
+- **`Tenant`** — small helper struct that carries a parent + tenant
+  triple.
+- **`RemoveOption`** — tunes `RemoveParent`.
+- **`WithCascadeDrop`** — `RemoveOption` that drops child partitions
+  during removal.
+
+### Retention
+
+- **`SweepReport`** — summary of one `Retention.Sweep` call.
+- **`SweepOption`** — tunes one `Sweep`.
+- **`WithDryRun`** — `SweepOption` that reports without emitting
+  DDL.
+
+### Hook API
+
+- **`Hook`** — function type invoked before Retention drops,
+  detaches, or archives a candidate. See **Pre-Drop Hook** above.
+- **`HookDecision`** — the enum returned by `Hook`.
+- **`HookDrop`**, **`HookDetach`**, **`HookArchive`**, **`HookSkip`**
+  — the four decision constants.
+- **`PartitionRef`** — the descriptor passed to `Hook`.
+
+### Import and reconcile
+
+- **`ReconcileReport`** — result of `ImportExisting`: `Imported`,
+  `Drifted`, `Orphaned`, `Skipped`.
+- **`DriftedPartition`** — a child whose name-implied bounds
+  disagree with its actual PG bound.
+- **`SkippedPartition`** — a child whose name does not match the
+  library's grammar.
+
+### Drain
+
+- **`DrainReport`** — summary of one `PartitionData` call.
+- **`DrainAnomaly`** — one condition drain could not fix
+  (missing target, null control column).
+- **`DrainOption`** — tunes one `PartitionData`.
+- **`WithBatchSize`**, **`WithMaxBatches`**, **`WithTenant`** — the
+  three drain options.
+
+### Observability
+
+- **`Meter`** — sink for counters and histograms. Never receives
+  `tenant_id` as a tag (see ADR-0010).
+- **`NoopMeter`** — default `Meter`; records nothing.
+
+### Migrations
+
+- **`Migration`** — one embedded SQL file: `Version`, `Name`, `SQL`.
+- **`Migrations()`** — returns the embedded migrations in ascending
+  version order.
+
+### Naming
+
+- **`TableName`** — the partition-name grammar. `Build` renders,
+  `Parse` inverts.
+- **`Bounds`** — half-open time range `[From, To)`.
+- **`PartitionHourInterval`**, **`PartitionDayInterval`**,
+  **`PartitionWeekInterval`**, **`PartitionMonthInterval`** —
+  the four supported interval sentinels.
+- **`PartitionIntervalLabel`** — maps an interval sentinel to its
+  canonical `partman.parent_tables.partition_interval` label.
+- **`DateNoHyphens`** — the `YYYYMMDD` layout used in bounded
+  partition suffixes.
+
 ## Non-goals for v1
 
 These terms appear in pg_partman but NOT in `go_partman` v1:
