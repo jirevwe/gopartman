@@ -2,13 +2,13 @@ package go_partman
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jirevwe/go_partman/internal/drain"
 	"github.com/jirevwe/go_partman/internal/importer"
 	"github.com/jirevwe/go_partman/internal/maintainer"
 	"github.com/jirevwe/go_partman/internal/provisioner"
@@ -35,6 +35,7 @@ type Manager struct {
 	retention   *retention.Impl
 	maintainer  maintainer.Maintainer
 	importer    *importer.Impl
+	drain       *drain.Impl
 }
 
 // retentionDropperAdapter satisfies registry.PartitionDropper by
@@ -143,10 +144,39 @@ func convertSkipped(in []importer.SkippedPartition) []SkippedPartition {
 }
 
 // PartitionData drains rows from the default partition into the
-// correct bounded child partitions in batches. ADR-0009 wires the
-// implementation.
-func (*Manager) PartitionData(_ context.Context, _ ParentRef, _ ...DrainOption) (DrainReport, error) {
-	return DrainReport{}, errors.ErrUnsupported
+// correct bounded child partitions in batches. See ADR-0009.
+func (m *Manager) PartitionData(ctx context.Context, ref ParentRef, opts ...DrainOption) (DrainReport, error) {
+	o := evalDrainOptions(opts)
+	rep, err := m.drain.PartitionData(ctx,
+		drain.ParentRef{SchemaName: ref.SchemaName, TableName: ref.TableName},
+		drain.Options{
+			BatchSize:  o.batchSize,
+			MaxBatches: o.maxBatches,
+			Tenant:     o.tenant,
+		},
+	)
+	if err != nil {
+		return DrainReport{}, err
+	}
+	return convertDrainReport(rep), nil
+}
+
+func convertDrainReport(in drain.Report) DrainReport {
+	out := DrainReport{
+		RowsMoved:  in.RowsMoved,
+		BatchesRun: in.BatchesRun,
+	}
+	if len(in.Anomalies) > 0 {
+		out.Anomalies = make([]DrainAnomaly, len(in.Anomalies))
+		for i, a := range in.Anomalies {
+			out.Anomalies[i] = DrainAnomaly{
+				MissingPartitionBounds: a.MissingPartitionBounds,
+				TenantId:               a.TenantId,
+				RowCount:               a.RowCount,
+			}
+		}
+	}
+	return out
 }
 
 // initInternals constructs the Provisioner, Retention, and Registry
@@ -207,5 +237,14 @@ func (m *Manager) initInternals() error {
 		return fmt.Errorf("go_partman: init importer: %w", err)
 	}
 	m.importer = imp
+
+	dr, err := drain.New(drain.Config{
+		Pool:   m.db,
+		Logger: m.logger,
+	})
+	if err != nil {
+		return fmt.Errorf("go_partman: init drain: %w", err)
+	}
+	m.drain = dr
 	return nil
 }

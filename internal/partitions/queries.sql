@@ -54,3 +54,13 @@ WHERE parent_table_id = @parent_table_id
   AND is_default = false
   AND status = 'active'
 ORDER BY partition_bounds_from;
+
+-- name: FindActivePartitionByBounds :one
+SELECT *
+FROM partman.partitions
+WHERE parent_table_id = @parent_table_id
+  AND tenant_id IS NOT DISTINCT FROM @tenant_id
+  AND is_default = false
+  AND status = 'active'
+  AND partition_bounds_from = @bounds_from
+  AND partition_bounds_to = @bounds_to;

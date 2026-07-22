@@ -1,7 +1,7 @@
 # ADR 0009 — `partition_data` helper: drain the default
 
 - **Epic**: E7
-- **Status**: Proposed
+- **Status**: Accepted
 - **Depends on**: 0001, 0004, 0007
 - **Blocks**: none
 

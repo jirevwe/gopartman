@@ -118,6 +118,70 @@ func TestNextBoundsUTC_NonUTCInputStillFloorsInUTC(t *testing.T) {
 	}
 }
 
+func TestBoundsFor_Daily(t *testing.T) {
+	got, err := BoundsFor(time.Date(2026, 3, 15, 13, 37, 42, 0, time.UTC), naming.PartitionDayInterval)
+	if err != nil {
+		t.Fatalf("BoundsFor: %v", err)
+	}
+	want := naming.Bounds{
+		From: time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
+	}
+	if !got.From.Equal(want.From) || !got.To.Equal(want.To) {
+		t.Errorf("BoundsFor daily: got %+v, want %+v", got, want)
+	}
+}
+
+func TestBoundsFor_Monthly_LastDayOfMonth(t *testing.T) {
+	got, err := BoundsFor(time.Date(2026, 1, 31, 23, 59, 59, 0, time.UTC), naming.PartitionMonthInterval)
+	if err != nil {
+		t.Fatalf("BoundsFor: %v", err)
+	}
+	want := naming.Bounds{
+		From: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	}
+	if !got.From.Equal(want.From) || !got.To.Equal(want.To) {
+		t.Errorf("BoundsFor monthly: got %+v, want %+v", got, want)
+	}
+}
+
+func TestBoundsFor_Weekly_SundayFloorsToMonday(t *testing.T) {
+	got, err := BoundsFor(time.Date(2026, 1, 4, 12, 0, 0, 0, time.UTC), naming.PartitionWeekInterval)
+	if err != nil {
+		t.Fatalf("BoundsFor: %v", err)
+	}
+	want := naming.Bounds{
+		From: time.Date(2025, 12, 29, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC),
+	}
+	if !got.From.Equal(want.From) || !got.To.Equal(want.To) {
+		t.Errorf("BoundsFor weekly: got %+v, want %+v", got, want)
+	}
+}
+
+func TestBoundsFor_Hourly_NonUTCInputFloorsInUTC(t *testing.T) {
+	loc := time.FixedZone("PST", -8*60*60)
+	got, err := BoundsFor(time.Date(2026, 3, 15, 20, 30, 0, 0, loc), naming.PartitionHourInterval)
+	if err != nil {
+		t.Fatalf("BoundsFor: %v", err)
+	}
+	want := naming.Bounds{
+		From: time.Date(2026, 3, 16, 4, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 3, 16, 5, 0, 0, 0, time.UTC),
+	}
+	if !got.From.Equal(want.From) || !got.To.Equal(want.To) {
+		t.Errorf("BoundsFor hourly: got %+v, want %+v", got, want)
+	}
+}
+
+func TestBoundsFor_UnsupportedIntervalReturnsError(t *testing.T) {
+	_, err := BoundsFor(time.Now(), 17*time.Minute)
+	if err == nil {
+		t.Fatal("want error for unsupported interval, got nil")
+	}
+}
+
 func TestParseIntervalLabel(t *testing.T) {
 	cases := []struct {
 		in   string

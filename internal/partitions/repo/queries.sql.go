@@ -11,6 +11,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const findActivePartitionByBounds = `-- name: FindActivePartitionByBounds :one
+SELECT id, name, parent_table_id, tenant_id, partition_by, partition_type, partition_bounds_from, partition_bounds_to, is_default, status, created_at, updated_at
+FROM partman.partitions
+WHERE parent_table_id = $1
+  AND tenant_id IS NOT DISTINCT FROM $2
+  AND is_default = false
+  AND status = 'active'
+  AND partition_bounds_from = $3
+  AND partition_bounds_to = $4
+`
+
+type FindActivePartitionByBoundsParams struct {
+	ParentTableID string
+	TenantID      pgtype.Text
+	BoundsFrom    pgtype.Timestamptz
+	BoundsTo      pgtype.Timestamptz
+}
+
+func (q *Queries) FindActivePartitionByBounds(ctx context.Context, arg FindActivePartitionByBoundsParams) (PartmanPartition, error) {
+	row := q.db.QueryRow(ctx, findActivePartitionByBounds,
+		arg.ParentTableID,
+		arg.TenantID,
+		arg.BoundsFrom,
+		arg.BoundsTo,
+	)
+	var i PartmanPartition
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ParentTableID,
+		&i.TenantID,
+		&i.PartitionBy,
+		&i.PartitionType,
+		&i.PartitionBoundsFrom,
+		&i.PartitionBoundsTo,
+		&i.IsDefault,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getDefaultPartition = `-- name: GetDefaultPartition :one
 SELECT id, name, parent_table_id, tenant_id, partition_by, partition_type, partition_bounds_from, partition_bounds_to, is_default, status, created_at, updated_at
 FROM partman.partitions

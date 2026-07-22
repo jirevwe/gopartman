@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	FindActivePartitionByBounds(ctx context.Context, arg FindActivePartitionByBoundsParams) (PartmanPartition, error)
 	GetDefaultPartition(ctx context.Context, arg GetDefaultPartitionParams) (PartmanPartition, error)
 	ListExpiredPartitions(ctx context.Context, arg ListExpiredPartitionsParams) ([]PartmanPartition, error)
 	ListPartitionsForParent(ctx context.Context, parentTableID string) ([]PartmanPartition, error)

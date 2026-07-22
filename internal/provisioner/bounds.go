@@ -61,6 +61,19 @@ func kindFromDuration(d time.Duration) (kind, error) {
 	}
 }
 
+// BoundsFor returns the half-open [From, To) window that contains t
+// under the given interval. All arithmetic is UTC. Interval is one of
+// the four public partman.PartitionXInterval constants. Drain (ADR-0009)
+// uses this to map a row's control-column value to its target bounds.
+func BoundsFor(t time.Time, interval time.Duration) (naming.Bounds, error) {
+	k, err := kindFromDuration(interval)
+	if err != nil {
+		return naming.Bounds{}, err
+	}
+	from := floorUTC(t, k)
+	return naming.Bounds{From: from, To: nextUTC(from, k)}, nil
+}
+
 // NextBoundsUTC returns `count` contiguous half-open [From, To) bounds
 // starting at the current period's floor for `now`. All arithmetic is
 // UTC. Interval is one of the four public partman.PartitionXInterval
