@@ -145,8 +145,8 @@ func printPartitions(ctx context.Context, pool *pgxpool.Pool, now time.Time) {
 
 	type row struct {
 		name      string
-		isDefault bool
 		status    string
+		isDefault bool
 	}
 	var found []row
 	for rows.Next() {

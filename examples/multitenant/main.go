@@ -25,8 +25,8 @@ import (
 type partitionRow struct {
 	tenant    string
 	name      string
-	isDefault bool
 	status    string
+	isDefault bool
 }
 
 const (

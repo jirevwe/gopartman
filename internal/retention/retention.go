@@ -63,11 +63,11 @@ func (p *Impl) retryPolicy(op string) retry.Policy {
 // PartitionRefs the sweep placed under each fate. DryRun mirrors the
 // option so callers do not have to plumb it separately.
 type SweepReport struct {
-	Considered int
 	Dropped    []hooks.PartitionRef
 	Detached   []hooks.PartitionRef
 	Archived   []hooks.PartitionRef
 	Skipped    []hooks.PartitionRef
+	Considered int
 	DryRun     bool
 }
 

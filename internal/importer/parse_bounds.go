@@ -15,9 +15,9 @@ import (
 // Bounds/TenantId are zero. TenantId is upper-cased so it aligns with
 // what TableName.Build writes and TableName.Parse extracts.
 type parsedBound struct {
-	IsDefault bool
-	TenantId  string
 	Bounds    naming.Bounds
+	TenantId  string
+	IsDefault bool
 }
 
 var boundedRE = regexp.MustCompile(`^FOR VALUES FROM \((.*)\) TO \((.*)\)$`)

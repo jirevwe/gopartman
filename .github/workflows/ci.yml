@@ -7,28 +7,26 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: make lint
+
   test-unit:
     name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.4'
-          cache: true
-      - name: Build
-        run: go build ./...
-      - name: Unit tests
-        run: go test ./...
+      - uses: jdx/mise-action@v2
+      - run: make test
 
   test-integration:
     name: Integration tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.4'
-          cache: true
-      - name: Integration tests
-        run: go test -tags=integration ./...
+      - uses: jdx/mise-action@v2
+      - run: make test-integration

@@ -35,16 +35,16 @@ type Meter interface {
 // Policy configures one Do call. MaxAttempts of 0 or 1 disables retry;
 // the caller still gets one attempt.
 type Policy struct {
-	MaxAttempts int
-	BaseDelay   time.Duration
-	MaxDelay    time.Duration
-	Jitter      float64
 	// Meter is optional. When non-nil, Do emits partman.retry_attempts_total
 	// on every retry and partman.retry_exhausted_total when the last attempt
 	// still fails with a retriable error.
 	Meter Meter
 	// Op labels the caller for the metric tag `op`. Low cardinality only.
-	Op string
+	Op          string
+	MaxAttempts int
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+	Jitter      float64
 }
 
 // Default returns the policy documented in ADR-0010.

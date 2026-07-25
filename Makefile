@@ -13,7 +13,7 @@ GOLINT := golangci-lint
 
 .PHONY: all test test-coverage test-short test-integration \
         lint lint-fix generate sqlc-generate sqlc-verify \
-        betteralign-install betteralign-check betteralign-apply \
+        betteralign-check betteralign-apply \
         tidy deps clean help
 
 # Default target
@@ -64,11 +64,8 @@ sqlc-verify: sqlc-generate ## Fail if generated sqlc code is out of sync with .s
 
 ## Struct field-alignment audit. Excludes sqlc-generated code
 ## under internal/{parents,tenants,partitions}/repo/.
+## betteralign is provisioned by mise — run `mise install` first.
 BETTERALIGN_EXCLUDE := (internal/parents/repo|internal/tenants/repo|internal/partitions/repo)/
-
-betteralign-install: ## Install betteralign into GOPATH/bin
-	@echo "Installing betteralign..."
-	$(GOCMD) install github.com/dkorunic/betteralign/cmd/betteralign@latest
 
 betteralign-check: ## Fail if any struct field-alignment issues exist
 	@echo "Auditing struct field alignment..."

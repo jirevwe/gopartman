@@ -52,9 +52,9 @@ type Anomaly struct {
 
 // Report summarizes one PartitionData call.
 type Report struct {
+	Anomalies  []Anomaly
 	RowsMoved  int
 	BatchesRun int
-	Anomalies  []Anomaly
 }
 
 // Meter is the observability sink Drain needs. The root partman.Meter

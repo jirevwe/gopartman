@@ -7,11 +7,11 @@ import (
 )
 
 type TestTable struct {
-	name          string
-	tableName     TableName
-	formattedName string
-	wantError     bool
 	err           error
+	name          string
+	formattedName string
+	tableName     TableName
+	wantError     bool
 }
 
 func TestTableNameGen(t *testing.T) {

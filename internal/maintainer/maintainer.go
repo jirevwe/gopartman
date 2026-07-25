@@ -86,35 +86,36 @@ type Locker interface {
 
 // Config bundles the dependencies for constructing an Impl.
 type Config struct {
-	Pool        *pgxpool.Pool
 	Registry    ParentLister
 	Provisioner PartitionEnsurer
 	Retention   RetentionSweeper
 	Clock       Clock
-	Logger      *slog.Logger
 	Meter       Meter
-	// Schedule sets the interval between ticks. Zero means "1 hour",
-	// matching the ADR-0007 default.
-	Schedule time.Duration
 	// Locker overrides the default advisory-lock implementation. Zero
 	// value means "use pg_try_advisory_lock via the pool".
 	Locker Locker
+	Pool   *pgxpool.Pool
+	Logger *slog.Logger
+	// Schedule sets the interval between ticks. Zero means "1 hour",
+	// matching the ADR-0007 default.
+	Schedule time.Duration
 }
 
 // Impl is the concrete Maintainer. Exported so the Manager facade can
 // hold a typed field.
 type Impl struct {
-	pool        *pgxpool.Pool
 	registry    ParentLister
 	provisioner PartitionEnsurer
 	retention   RetentionSweeper
 	clock       Clock
-	logger      *slog.Logger
 	meter       Meter
-	schedule    time.Duration
 	locker      Locker
 
-	sched *scheduler
+	pool   *pgxpool.Pool
+	logger *slog.Logger
+
+	sched    *scheduler
+	schedule time.Duration
 }
 
 const defaultSchedule = time.Hour

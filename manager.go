@@ -23,19 +23,19 @@ import (
 // Construct with New. Manager is concrete on purpose; callers who need
 // test doubles wrap it.
 type Manager struct {
-	db       *pgxpool.Pool
-	clock    Clock
-	logger   *slog.Logger
-	hook     Hook
-	meter    Meter
-	schedule time.Duration
+	clock Clock
+	meter Meter
 
 	provisioner provisioner.Provisioner
 	registry    registry.Registry
-	retention   *retention.Impl
 	maintainer  maintainer.Maintainer
+	db          *pgxpool.Pool
+	logger      *slog.Logger
+	hook        Hook
+	retention   *retention.Impl
 	importer    *importer.Impl
 	drain       *drain.Impl
+	schedule    time.Duration
 }
 
 // retentionDropperAdapter satisfies registry.PartitionDropper by

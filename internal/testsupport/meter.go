@@ -7,9 +7,9 @@ import "sync"
 // multiple goroutines. Tests read the recorded state after work is
 // finished.
 type CaptureMeter struct {
-	mu       sync.Mutex
 	counters map[string]int64
 	hists    map[string][]float64
+	mu       sync.Mutex
 }
 
 // NewCaptureMeter returns a ready-to-use CaptureMeter.

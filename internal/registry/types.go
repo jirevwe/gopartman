@@ -12,10 +12,10 @@ type ParentConfig struct {
 	TenantColumn       string
 	PartitionBy        string
 	PartitionType      string
+	RetentionSchema    string
 	PartitionInterval  time.Duration
 	Premake            int
 	RetentionPeriod    time.Duration
-	RetentionSchema    string
 	RetentionKeepTable bool
 	// DisableAutomaticMaintenance opts the parent out of the Maintainer
 	// loop (ADR-0007). Zero value keeps maintenance enabled, matching
@@ -39,9 +39,9 @@ type ParentInfo struct {
 	PartitionBy          string
 	PartitionType        string
 	PartitionInterval    string
+	RetentionSchema      string
 	Premake              int
 	RetentionPeriod      time.Duration
-	RetentionSchema      string
 	RetentionKeepTable   bool
 	AutomaticMaintenance bool
 }

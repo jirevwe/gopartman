@@ -89,10 +89,10 @@ func TestCompareNameAndBound_BothDefault(t *testing.T) {
 
 func TestIntervalMatches(t *testing.T) {
 	tests := []struct {
-		name string
-		k    intervalKind
 		from time.Time
 		to   time.Time
+		name string
+		k    intervalKind
 		want bool
 	}{
 		{

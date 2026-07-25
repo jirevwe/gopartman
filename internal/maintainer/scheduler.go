@@ -12,10 +12,11 @@ import (
 type scheduler struct {
 	m *Impl
 
+	done chan struct{}
+	wg   sync.WaitGroup
+
 	mu      sync.Mutex
 	running bool
-	done    chan struct{}
-	wg      sync.WaitGroup
 }
 
 func newScheduler(m *Impl) *scheduler {

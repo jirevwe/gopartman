@@ -141,14 +141,14 @@ func TestSplitFQ_NoDot(t *testing.T) {
 
 func TestDecisionLabel(t *testing.T) {
 	cases := []struct {
-		in   hooks.HookDecision
 		want string
+		in   hooks.HookDecision
 	}{
-		{hooks.HookDrop, "drop"},
-		{hooks.HookDetach, "detach"},
-		{hooks.HookArchive, "archive"},
-		{hooks.HookSkip, "skip"},
-		{hooks.HookDecision(99), "unknown"},
+		{in: hooks.HookDrop, want: "drop"},
+		{in: hooks.HookDetach, want: "detach"},
+		{in: hooks.HookArchive, want: "archive"},
+		{in: hooks.HookSkip, want: "skip"},
+		{in: hooks.HookDecision(99), want: "unknown"},
 	}
 	for _, c := range cases {
 		if got := decisionLabel(c.in); got != c.want {

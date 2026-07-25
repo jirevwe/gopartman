@@ -16,9 +16,9 @@ var migrationFS embed.FS
 // SQL must be executed as a single statement string, not split on ";" —
 // some files contain dollar-quoted plpgsql function bodies.
 type Migration struct {
-	Version int
 	Name    string
 	SQL     string
+	Version int
 }
 
 // Migrations returns the embedded migrations in ascending version order.

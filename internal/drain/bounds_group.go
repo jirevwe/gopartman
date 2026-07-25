@@ -14,17 +14,17 @@ import (
 // grouping code never emits a zero-value Bounds because rows with a
 // NULL control column are filtered out in the read.
 type groupKey struct {
+	Bounds   naming.Bounds
 	Tenant   string
 	TenantOK bool
-	Bounds   naming.Bounds
 }
 
 // batchRow is one row read from the default partition. TenantOK is
 // false when the parent has no tenant column at all.
 type batchRow struct {
-	CTID     pgtype.TID
 	Control  time.Time
 	Tenant   string
+	CTID     pgtype.TID
 	TenantOK bool
 }
 

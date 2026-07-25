@@ -5,9 +5,9 @@ package gopartman
 type DrainOption func(*drainOptions)
 
 type drainOptions struct {
+	tenant     *string
 	batchSize  int
 	maxBatches int
-	tenant     *string
 }
 
 // WithBatchSize sets the maximum rows read per batch. Default is 1000.
@@ -51,9 +51,9 @@ func evalDrainOptions(opts []DrainOption) drainOptions {
 // counts the batches the drain executed. Anomalies lists the target
 // partitions that were missing and the row counts left in the default.
 type DrainReport struct {
+	Anomalies  []DrainAnomaly
 	RowsMoved  int
 	BatchesRun int
-	Anomalies  []DrainAnomaly
 }
 
 // DrainAnomaly names one condition the drain could not fix. A zero-value

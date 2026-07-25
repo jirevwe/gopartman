@@ -8,8 +8,8 @@ import (
 )
 
 type fakeDropper struct {
-	calls []ParentRef
 	err   error
+	calls []ParentRef
 }
 
 func (f *fakeDropper) DropAll(_ context.Context, parent ParentRef) error {

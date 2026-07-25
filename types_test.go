@@ -8,16 +8,16 @@ import (
 func TestPartitionIntervalLabel(t *testing.T) {
 	cases := []struct {
 		name string
-		in   time.Duration
 		want string
+		in   time.Duration
 		bad  bool
 	}{
-		{"hourly", PartitionHourInterval, "hourly", false},
-		{"daily", PartitionDayInterval, "daily", false},
-		{"weekly", PartitionWeekInterval, "weekly", false},
-		{"monthly sentinel", PartitionMonthInterval, "monthly", false},
-		{"random", 17 * time.Minute, "", true},
-		{"zero", 0, "", true},
+		{name: "hourly", in: PartitionHourInterval, want: "hourly"},
+		{name: "daily", in: PartitionDayInterval, want: "daily"},
+		{name: "weekly", in: PartitionWeekInterval, want: "weekly"},
+		{name: "monthly sentinel", in: PartitionMonthInterval, want: "monthly"},
+		{name: "random", in: 17 * time.Minute, bad: true},
+		{name: "zero", in: 0, bad: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

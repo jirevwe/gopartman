@@ -20,11 +20,12 @@ import (
 // -----------------------------------------------------------------------------
 
 type fakeRegistry struct {
-	parents []registry.ParentInfo
-	tenants map[string][]registry.TenantInfo
-
 	listParentsErr error
 	listTenantsErr error
+
+	tenants map[string][]registry.TenantInfo
+
+	parents []registry.ParentInfo
 
 	listParentsCalls atomic.Int32
 	listTenantsCalls atomic.Int32
@@ -47,16 +48,16 @@ func (f *fakeRegistry) ListTenants(_ context.Context, ref registry.ParentRef) ([
 }
 
 type ensureCall struct {
-	Parent provisioner.ParentRef
 	Tenant *provisioner.TenantRef
+	Parent provisioner.ParentRef
 }
 
 type fakeProvisioner struct {
-	mu    sync.Mutex
-	calls []ensureCall
-	err   error
+	err error
 	// panicOn holds "schema.table" values that must trigger a panic.
 	panicOn map[string]bool
+	calls   []ensureCall
+	mu      sync.Mutex
 }
 
 func (f *fakeProvisioner) EnsurePartitions(_ context.Context, parent provisioner.ParentRef, tenant *provisioner.TenantRef) (provisioner.EnsureReport, error) {
@@ -83,9 +84,9 @@ type sweepCall struct {
 }
 
 type fakeRetention struct {
-	mu    sync.Mutex
-	calls []sweepCall
 	err   error
+	calls []sweepCall
+	mu    sync.Mutex
 }
 
 func (f *fakeRetention) Sweep(_ context.Context, parent retention.ParentRef, _ ...retention.SweepOption) (retention.SweepReport, error) {
@@ -123,8 +124,8 @@ func (f *fakeLocker) TryLock(_ context.Context, schema, table string) (bool, fun
 }
 
 type fixedClock struct {
-	mu sync.Mutex
 	t  time.Time
+	mu sync.Mutex
 }
 
 func (c *fixedClock) Now() time.Time {

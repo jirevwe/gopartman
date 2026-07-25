@@ -28,9 +28,9 @@ const (
 
 // PartitionRef identifies a candidate partition passed to a Hook.
 type PartitionRef struct {
+	Bounds    naming.Bounds
 	Schema    string
 	Parent    string
 	TenantId  string
-	Bounds    naming.Bounds
 	IsDefault bool
 }
