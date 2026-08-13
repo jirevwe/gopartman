@@ -10,6 +10,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+Name parsing against the parent (ADR-0012):
+
 - `TableName.Parse` takes the parent table name as a second argument:
   `Parse(fqName, parentName string)`. A tenant segment is otherwise
   indistinguishable from the last word of a multi-word parent — in

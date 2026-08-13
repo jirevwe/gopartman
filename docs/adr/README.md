@@ -39,6 +39,7 @@ an ADR. To supersede an ADR, add a new one and cross-link.
 | 0009 | [`partition_data` helper — drain the default](0009-partition-data-drain.md) | E7 | Implemented | `b6c217a` |
 | 0010 | [Observability, typed errors, retry policy](0010-observability-errors-retry.md) | E8 | Implemented | `8fa1a33` |
 | 0011 | [Docs, examples, and README refresh](0011-docs-examples-readme.md) | E9 | Implemented | this PR |
+| 0012 | [Parse partition names against their parent](0012-parse-names-against-parent.md) | E6 (follow-up) | Proposed | this PR |
 
 ## Related files
 
