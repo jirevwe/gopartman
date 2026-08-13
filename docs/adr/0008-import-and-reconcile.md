@@ -4,6 +4,8 @@
 - **Status**: Implemented (commit `ac01c70`)
 - **Depends on**: 0001, 0002, 0004
 - **Blocks**: none
+- **Amended by**: [0012](0012-parse-names-against-parent.md) — step 3
+  passes the parent name to `TableName.Parse`.
 
 ## Context
 

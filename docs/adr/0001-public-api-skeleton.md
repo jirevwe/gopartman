@@ -4,6 +4,9 @@
 - **Status**: Implemented (commit `8d426b0`)
 - **Depends on**: 0000
 - **Blocks**: 0004, 0005, 0006, 0007
+- **Amended by**: [0012](0012-parse-names-against-parent.md) — `Parse`
+  takes the parent name as a second argument. It cannot find the tenant
+  from the child name alone.
 
 ## Context
 

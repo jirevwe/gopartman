@@ -168,7 +168,7 @@ func (i *Impl) Import(ctx context.Context, ref ParentRef) (ReconcileReport, erro
 		fq := c.fq()
 		seen[fq] = struct{}{}
 
-		nameParsed, err := (naming.TableName{}).Parse(fq)
+		nameParsed, err := (naming.TableName{}).Parse(fq, ref.TableName)
 		if err != nil {
 			report.Skipped = append(report.Skipped, SkippedPartition{
 				Name:   fq,
@@ -237,12 +237,7 @@ func (i *Impl) Import(ctx context.Context, ref ParentRef) (ReconcileReport, erro
 		if _, ok := seen[ep.Name]; ok {
 			continue
 		}
-		ref, err := refFromMetadata(ep)
-		if err != nil {
-			// Cannot construct a full ref; still surface the raw name.
-			ref = hooks.PartitionRef{Schema: "", Parent: ep.Name}
-		}
-		report.Orphaned = append(report.Orphaned, ref)
+		report.Orphaned = append(report.Orphaned, refFromMetadata(ep, ref.SchemaName, ref.TableName))
 	}
 
 	return report, nil
@@ -343,14 +338,15 @@ func buildRef(name naming.TableName, bound parsedBound) hooks.PartitionRef {
 // refFromMetadata reconstructs a hooks.PartitionRef from a stored
 // partman.partitions row. Used for the Orphaned list, which has no PG
 // child to consult.
-func refFromMetadata(ep partitionsrepo.PartmanPartition) (hooks.PartitionRef, error) {
-	tn, err := (naming.TableName{}).Parse(ep.Name)
-	if err != nil {
-		return hooks.PartitionRef{}, err
-	}
+//
+// Schema and parent come from the parent being reconciled rather than from
+// re-parsing ep.Name: the caller already holds both, and the tenant is
+// stored on the row, so there is nothing left for a name parse to
+// recover.
+func refFromMetadata(ep partitionsrepo.PartmanPartition, schema, parent string) hooks.PartitionRef {
 	ref := hooks.PartitionRef{
-		Schema:    tn.SchemaName,
-		Parent:    tn.ParentName,
+		Schema:    schema,
+		Parent:    parent,
 		IsDefault: ep.IsDefault,
 	}
 	if ep.TenantID.Valid {
@@ -362,5 +358,5 @@ func refFromMetadata(ep partitionsrepo.PartmanPartition) (hooks.PartitionRef, er
 			To:   ep.PartitionBoundsTo.Time,
 		}
 	}
-	return ref, nil
+	return ref
 }

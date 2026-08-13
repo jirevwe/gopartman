@@ -277,6 +277,35 @@ func TestImport_CompositeTenant_LowercaseInputUpperCased(t *testing.T) {
 	}
 }
 
+// The inverse of the case above: the child NAME is folded, which is what
+// PostgreSQL stores for a partition created by unquoted DDL outside this
+// package. It is still that tenant's partition for that day, so it must be
+// adopted. Reporting it as drift leaves it unmanaged, and an unmanaged
+// partition is one retention never drops, so the table grows forever while
+// retention reports success.
+func TestImport_CompositeTenant_FoldedChildNameImported(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool, withTenant())
+	createTenantChild(t, pool, f, "events_tenant1_20260415", "tenant1", day1From, day1To)
+
+	imp := newImporter(t, pool)
+	report, err := imp.Import(t.Context(), importer.ParentRef{SchemaName: f.Schema, TableName: f.Table})
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if len(report.Imported) != 1 {
+		t.Errorf("Imported = %d, want 1; report=%+v", len(report.Imported), report)
+	}
+	if len(report.Drifted) != 0 {
+		t.Errorf("Drifted = %d, want 0 (folded child name is still adoptable): %+v", len(report.Drifted), report.Drifted)
+	}
+	// Tenant identity comes from the bound, which is canonicalized, so
+	// metadata stays upper-case regardless of the name's case.
+	if got := tenantIDForPartition(t, pool, f.Schema+".events_tenant1_20260415"); got != "TENANT1" {
+		t.Errorf("tenant_id in metadata = %q, want TENANT1", got)
+	}
+}
+
 func TestImport_DriftedPartition_BoundMismatch(t *testing.T) {
 	pool, _ := testsupport.NewPG(t)
 	f := setupParent(t, pool)
