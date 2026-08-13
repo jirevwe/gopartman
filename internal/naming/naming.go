@@ -82,14 +82,24 @@ func (tn TableName) Build() (string, error) {
 }
 
 // Parse is the inverse of Build. It splits a fully qualified partition
-// table name into its components. Parse leaves Bounds.To and Interval
-// as zero values; callers that need those must compute them from the
-// parent's registered interval.
+// table name into its components, given the name of the parent table the
+// partition belongs to. Parse leaves Bounds.To and Interval as zero
+// values; callers that need those must compute them from the parent's
+// registered interval.
 //
-// The heuristic for tenant detection: the segment right before the
-// suffix is treated as a tenant only if it matches ^[A-Z0-9]+$, which
-// matches Build's strings.ToUpper output.
-func (TableName) Parse(fqName string) (TableName, error) {
+// The parent name is required because a tenant segment is otherwise
+// indistinguishable from the last word of a multi-word parent. In
+// "public.order_items_20060102", "items" could be either, and no property
+// of the string itself decides which. Callers always know the parent they
+// are reconciling, so ask for it rather than guess.
+//
+// Comparison of the parent segment is case-insensitive, and the tenant is
+// returned as written. PostgreSQL folds unquoted identifiers to lower
+// case, so a partition created by DDL outside this package can carry a
+// tenant that Build would have upper-cased. Refusing to read those is
+// what makes them un-adoptable, and an un-adopted partition is one
+// retention never drops.
+func (TableName) Parse(fqName, parentName string) (TableName, error) {
 	dot := strings.Index(fqName, ".")
 	if dot < 0 {
 		return TableName{}, fmt.Errorf("fqName missing schema separator: %q", fqName)
@@ -100,6 +110,9 @@ func (TableName) Parse(fqName string) (TableName, error) {
 	if !alphaNumericRegex.MatchString(schema) {
 		return TableName{}, fmt.Errorf("schema name contains invalid characters")
 	}
+	if !alphaNumericRegex.MatchString(parentName) {
+		return TableName{}, fmt.Errorf("parent name contains invalid characters")
+	}
 
 	lastUnderscore := strings.LastIndex(rest, "_")
 	if lastUnderscore < 0 {
@@ -108,7 +121,7 @@ func (TableName) Parse(fqName string) (TableName, error) {
 	suffix := rest[lastUnderscore+1:]
 	remainder := rest[:lastUnderscore]
 
-	tn := TableName{SchemaName: schema}
+	tn := TableName{SchemaName: schema, ParentName: parentName}
 
 	switch {
 	case suffix == "default":
@@ -123,20 +136,19 @@ func (TableName) Parse(fqName string) (TableName, error) {
 		return TableName{}, fmt.Errorf("suffix must be \"default\" or YYYYMMDD, got %q", suffix)
 	}
 
-	if tenantSep := strings.LastIndex(remainder, "_"); tenantSep >= 0 {
-		candidate := remainder[tenantSep+1:]
-		if isUpperAlphanumeric(candidate) {
-			tn.TenantId = candidate
-			tn.ParentName = remainder[:tenantSep]
-		} else {
-			tn.ParentName = remainder
+	// Anything between the parent name and the suffix is the tenant.
+	switch {
+	case strings.EqualFold(remainder, parentName):
+		// No tenant segment.
+	case len(remainder) > len(parentName)+1 &&
+		strings.EqualFold(remainder[:len(parentName)], parentName) &&
+		remainder[len(parentName)] == '_':
+		tn.TenantId = remainder[len(parentName)+1:]
+		if !alphaNumericRegex.MatchString(tn.TenantId) {
+			return TableName{}, fmt.Errorf("tenant id contains invalid characters")
 		}
-	} else {
-		tn.ParentName = remainder
-	}
-
-	if !alphaNumericRegex.MatchString(tn.ParentName) {
-		return TableName{}, fmt.Errorf("parent name contains invalid characters")
+	default:
+		return TableName{}, fmt.Errorf("name %q does not belong to parent %q", fqName, parentName)
 	}
 
 	return tn, nil
@@ -162,16 +174,4 @@ func PartitionIntervalLabel(d time.Duration) (string, error) {
 	default:
 		return "", fmt.Errorf("partman: unsupported partition interval %s; use one of the PartitionXInterval constants", d)
 	}
-}
-
-func isUpperAlphanumeric(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
 }

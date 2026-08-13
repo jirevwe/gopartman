@@ -6,6 +6,27 @@ The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `TableName.Parse` takes the parent table name as a second argument:
+  `Parse(fqName, parentName string)`. A tenant segment is otherwise
+  indistinguishable from the last word of a multi-word parent — in
+  `public.order_items_20060102`, `items` could be either, and no property
+  of the string decides which. Callers always know the parent they are
+  reconciling. Breaking for direct callers of `Parse`; `Build` is
+  unchanged.
+
+### Fixed
+
+- `ImportExisting` adopts partitions whose name carries a lower-case tenant
+  segment. PostgreSQL folds unquoted identifiers, so a partition created by
+  DDL outside this package could not be parsed back into a tenant. It was
+  reported as drift and never written to `partman.partitions`, which left
+  it outside retention's view: the table grew without bound while retention
+  ran to completion and reported success.
+
 ## [0.1.0] — Unreleased
 
 Initial public release. First release-tag candidate.
@@ -115,4 +136,5 @@ Nothing.
 
 Nothing.
 
+[Unreleased]: https://github.com/jirevwe/gopartman/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/jirevwe/gopartman/releases/tag/v0.1.0
