@@ -30,6 +30,14 @@ func buildDetachDDL(parentSchema, parentTable, childSchema, childTable string) s
 	return fmt.Sprintf("ALTER TABLE %s DETACH PARTITION %s", parentFQ, childFQ)
 }
 
+// buildDetachConcurrentlyDDL returns DETACH PARTITION CONCURRENTLY.
+// Must not run inside a transaction (ADR-0013).
+func buildDetachConcurrentlyDDL(parentSchema, parentTable, childSchema, childTable string) string {
+	parentFQ := pgx.Identifier{parentSchema, parentTable}.Sanitize()
+	childFQ := pgx.Identifier{childSchema, childTable}.Sanitize()
+	return fmt.Sprintf("ALTER TABLE %s DETACH PARTITION %s CONCURRENTLY", parentFQ, childFQ)
+}
+
 // buildSetSchemaDDL returns an ALTER TABLE <fq> SET SCHEMA <target>
 // statement. The target schema is sanitized.
 func buildSetSchemaDDL(childSchema, childTable, targetSchema string) string {

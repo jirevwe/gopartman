@@ -245,6 +245,47 @@ func TestBuildDefaultPartitionDDL(t *testing.T) {
 	}
 }
 
+func TestBuildStandaloneLikeDDL(t *testing.T) {
+	got := buildStandaloneLikeDDL("app", "events", "app", "events_20260101")
+	want := `CREATE TABLE IF NOT EXISTS "app"."events_20260101" (LIKE "app"."events" INCLUDING DEFAULTS)`
+	if got != want {
+		t.Errorf("DDL mismatch:\ngot:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestBuildBoundsCheckDDL_NoTenant(t *testing.T) {
+	b := naming.Bounds{
+		From: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	}
+	got := buildBoundsCheckDDL("app", "events_20260101", "created_at", "", "", b)
+	want := `ALTER TABLE "app"."events_20260101" ADD CONSTRAINT "events_20260101_partman_bounds" CHECK ("created_at" IS NOT NULL AND "created_at" >= TIMESTAMPTZ '2026-01-01T00:00:00Z' AND "created_at" < TIMESTAMPTZ '2026-02-01T00:00:00Z')`
+	if got != want {
+		t.Errorf("DDL mismatch:\ngot:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestBuildAttachPartitionDDL_NoTenant(t *testing.T) {
+	b := naming.Bounds{
+		From: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	}
+	got := buildAttachPartitionDDL("app", "events", "app", "events_20260101", "", b)
+	want := `ALTER TABLE "app"."events" ATTACH PARTITION "app"."events_20260101" FOR VALUES FROM (TIMESTAMPTZ '2026-01-01T00:00:00Z') TO (TIMESTAMPTZ '2026-02-01T00:00:00Z')`
+	if got != want {
+		t.Errorf("DDL mismatch:\ngot:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestTimeColumnFromPartitionBy(t *testing.T) {
+	if got := timeColumnFromPartitionBy("created_at"); got != "created_at" {
+		t.Errorf("got %q", got)
+	}
+	if got := timeColumnFromPartitionBy("project_id, created_at"); got != "created_at" {
+		t.Errorf("got %q", got)
+	}
+}
+
 func TestPqQuoteLiteral_EscapesQuotes(t *testing.T) {
 	got := pqQuoteLiteral("a'b")
 	want := "'a''b'"

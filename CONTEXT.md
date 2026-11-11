@@ -84,6 +84,17 @@ unless retention moves it.
 
 - Not to be confused with: **Drop** (drop removes the table; detach
   keeps it).
+- Not to be confused with: **Concurrent detach** (classic detach takes
+  parent `ACCESS EXCLUSIVE`; concurrent detach does not).
+
+### Concurrent detach
+
+`ALTER TABLE ... DETACH PARTITION ... CONCURRENTLY`. Postgres takes
+`SHARE UPDATE EXCLUSIVE` on the parent instead of `ACCESS EXCLUSIVE`.
+Writers keep going. The statement cannot run inside a transaction.
+Requires PostgreSQL 14 or newer.
+
+- Not to be confused with: **Detach** (classic non-concurrent detach).
 
 ### Drop
 
@@ -92,6 +103,15 @@ metadata row moves to `status = 'dropped'`.
 
 - Not to be confused with: **Detach** (drop removes the table; detach
   keeps it).
+
+### Online DDL mode
+
+An opt-in Manager mode. Create uses prepare-then-`ATTACH`. Drop uses
+concurrent detach then `DROP` of the detached table. Classic mode stays
+the default. Attach still takes a brief parent exclusive lock.
+
+- Not to be confused with: **Maintenance Run** (the run always happens;
+  the mode only changes the DDL shape).
 
 ### Archive Schema
 

@@ -164,10 +164,16 @@ func quoteIdent(s string) string {
 
 func newRetention(t *testing.T, pool *pgxpool.Pool, clockAt time.Time, hook hooks.Hook) *retention.Impl {
 	t.Helper()
+	return newRetentionMode(t, pool, clockAt, hook, false)
+}
+
+func newRetentionMode(t *testing.T, pool *pgxpool.Pool, clockAt time.Time, hook hooks.Hook, online bool) *retention.Impl {
+	t.Helper()
 	r, err := retention.New(retention.Config{
-		Pool:  pool,
-		Clock: partman.NewSimulatedClock(clockAt),
-		Hook:  hook,
+		Pool:   pool,
+		Clock:  partman.NewSimulatedClock(clockAt),
+		Hook:   hook,
+		Online: online,
 	})
 	if err != nil {
 		t.Fatalf("retention.New: %v", err)
@@ -583,6 +589,91 @@ func TestDropAll_ReturnsNilWhenParentMetadataAbsent(t *testing.T) {
 	r := newRetention(t, pool, nowFixed, nil)
 	if err := r.DropAll(t.Context(), "nope", "nada"); err != nil {
 		t.Errorf("DropAll on absent parent should be nil, got %v", err)
+	}
+}
+
+func TestSweep_OnlineMode_DropsViaConcurrentDetach(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool)
+	insertBoundedPartition(t, pool, f, "events_20260415", pastFrom, pastTo)
+
+	r := newRetentionMode(t, pool, nowFixed, nil, true)
+	report, err := r.Sweep(t.Context(), retention.ParentRef{SchemaName: f.Schema, TableName: f.Table})
+	if err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if len(report.Dropped) != 1 {
+		t.Fatalf("Dropped = %d, want 1", len(report.Dropped))
+	}
+	if tableExists(t, pool, f.Schema, "events_20260415") {
+		t.Error("expected expired child dropped")
+	}
+	if partitionStatus(t, pool, f.Schema+".events_20260415") != "dropped" {
+		t.Errorf("expected status=dropped")
+	}
+}
+
+func TestSweep_OnlineMode_AllowsInsertsDuringDrop(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool)
+	insertBoundedPartition(t, pool, f, "events_20260415", pastFrom, pastTo)
+	// Current partition so inserts have a home while the expired child drops.
+	insertBoundedPartition(t, pool, f, "events_20260614", currFrom, currTo)
+
+	insertErr := make(chan error, 1)
+	go func() {
+		var last error
+		for i := 0; i < 200; i++ {
+			_, last = pool.Exec(context.Background(),
+				fmt.Sprintf(`INSERT INTO %s.%s (created_at) VALUES ($1)`, quoteIdent(f.Schema), quoteIdent(f.Table)),
+				currFrom.Add(time.Hour),
+			)
+			if last != nil {
+				insertErr <- last
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		insertErr <- nil
+	}()
+
+	r := newRetentionMode(t, pool, nowFixed, nil, true)
+	if _, err := r.Sweep(t.Context(), retention.ParentRef{SchemaName: f.Schema, TableName: f.Table}); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if err := <-insertErr; err != nil {
+		t.Fatalf("concurrent insert failed during online drop: %v", err)
+	}
+	if tableExists(t, pool, f.Schema, "events_20260415") {
+		t.Error("expected expired child dropped")
+	}
+}
+
+func TestSweep_OnlineMode_ResumeAfterDetach(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool)
+	insertBoundedPartition(t, pool, f, "events_20260415", pastFrom, pastTo)
+
+	// Simulate a crash after concurrent detach succeeded but before mark/drop.
+	detachDDL := fmt.Sprintf(
+		`ALTER TABLE %s.%s DETACH PARTITION %s.%s CONCURRENTLY`,
+		quoteIdent(f.Schema), quoteIdent(f.Table),
+		quoteIdent(f.Schema), quoteIdent("events_20260415"),
+	)
+	if _, err := pool.Exec(t.Context(), detachDDL); err != nil {
+		t.Fatalf("pre-detach: %v", err)
+	}
+
+	r := newRetentionMode(t, pool, nowFixed, nil, true)
+	report, err := r.Sweep(t.Context(), retention.ParentRef{SchemaName: f.Schema, TableName: f.Table})
+	if err != nil {
+		t.Fatalf("Sweep after partial detach: %v", err)
+	}
+	if len(report.Dropped) != 1 {
+		t.Fatalf("Dropped = %d, want 1", len(report.Dropped))
+	}
+	if tableExists(t, pool, f.Schema, "events_20260415") {
+		t.Error("expected detached child dropped on resume")
 	}
 }
 

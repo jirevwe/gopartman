@@ -36,6 +36,7 @@ type Manager struct {
 	importer    *importer.Impl
 	drain       *drain.Impl
 	schedule    time.Duration
+	ddlMode     PartitionDDLMode
 }
 
 // retentionDropperAdapter satisfies registry.PartitionDropper by
@@ -188,6 +189,7 @@ func (m *Manager) initInternals() error {
 		Clock:  m.clock,
 		Logger: m.logger,
 		Meter:  m.meter,
+		Online: m.ddlMode == PartitionDDLModeOnline,
 	})
 	if err != nil {
 		return fmt.Errorf("gopartman: init provisioner: %w", err)
@@ -200,6 +202,7 @@ func (m *Manager) initInternals() error {
 		Hook:   m.hook,
 		Logger: m.logger,
 		Meter:  m.meter,
+		Online: m.ddlMode == PartitionDDLModeOnline,
 	})
 	if err != nil {
 		return fmt.Errorf("gopartman: init retention: %w", err)

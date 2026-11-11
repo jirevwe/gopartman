@@ -84,6 +84,8 @@ type Config struct {
 	Hook   hooks.Hook
 	Logger *slog.Logger
 	Meter  Meter
+	// Online enables DETACH PARTITION CONCURRENTLY then DROP (ADR-0013).
+	Online bool
 }
 
 // Impl is the concrete Retention. Exported so the Manager facade can
@@ -94,6 +96,7 @@ type Impl struct {
 	hook   hooks.Hook
 	logger *slog.Logger
 	meter  Meter
+	online bool
 }
 
 // New constructs an Impl. Pool and Clock are required. Hook is
@@ -120,6 +123,7 @@ func New(cfg Config) (*Impl, error) {
 		hook:   cfg.Hook,
 		logger: logger,
 		meter:  meter,
+		online: cfg.Online,
 	}, nil
 }
 
@@ -290,9 +294,10 @@ func (p *Impl) DropAll(ctx context.Context, schemaName, tableName string) error 
 	return nil
 }
 
-// applyDecision runs the DDL and metadata write for one partition in
-// a fresh transaction. On any error the transaction rolls back and
-// no metadata write is committed for this partition.
+// applyDecision runs the DDL and metadata write for one partition.
+// Classic mode keeps DDL and metadata in one transaction (ADR-0006).
+// Online mode detaches concurrently outside a transaction, then drops
+// and updates metadata (ADR-0013).
 func (p *Impl) applyDecision(
 	ctx context.Context,
 	prow parentsrepo.PartmanParentTable,
@@ -304,12 +309,24 @@ func (p *Impl) applyDecision(
 		return fmt.Errorf("bad partition name %q", row.Name)
 	}
 
+	if p.online {
+		return p.applyDecisionOnline(ctx, prow, row, childSchema, childTable, decision)
+	}
+	return p.applyDecisionClassic(ctx, prow, row, childSchema, childTable, decision)
+}
+
+func (p *Impl) applyDecisionClassic(
+	ctx context.Context,
+	prow parentsrepo.PartmanParentTable,
+	row partitionsrepo.PartmanPartition,
+	childSchema, childTable string,
+	decision hooks.HookDecision,
+) error {
 	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() {
-		// pgx.ErrTxClosed is expected after a successful commit.
 		_ = tx.Rollback(ctx)
 	}()
 
@@ -352,6 +369,93 @@ func (p *Impl) applyDecision(
 		return fmt.Errorf("commit: %w", err)
 	}
 	return nil
+}
+
+func (p *Impl) applyDecisionOnline(
+	ctx context.Context,
+	prow parentsrepo.PartmanParentTable,
+	row partitionsrepo.PartmanPartition,
+	childSchema, childTable string,
+	decision hooks.HookDecision,
+) error {
+	switch decision {
+	case hooks.HookDrop:
+		if err := p.detachConcurrentlyIfNeeded(ctx, prow.SchemaName, prow.TableName, childSchema, childTable); err != nil {
+			return err
+		}
+		if _, err := p.pool.Exec(ctx, buildDropIfExistsDDL(childSchema, childTable)); err != nil {
+			return fmt.Errorf("drop: %w", err)
+		}
+		if err := partitionsrepo.New(p.pool).MarkPartitionDropped(ctx, row.ID); err != nil {
+			return fmt.Errorf("mark dropped: %w", err)
+		}
+		return nil
+	case hooks.HookDetach:
+		if err := p.detachConcurrentlyIfNeeded(ctx, prow.SchemaName, prow.TableName, childSchema, childTable); err != nil {
+			return err
+		}
+		if err := partitionsrepo.New(p.pool).MarkPartitionDetached(ctx, row.ID); err != nil {
+			return fmt.Errorf("mark detached: %w", err)
+		}
+		return nil
+	case hooks.HookArchive:
+		if err := p.detachConcurrentlyIfNeeded(ctx, prow.SchemaName, prow.TableName, childSchema, childTable); err != nil {
+			return err
+		}
+		if _, err := p.pool.Exec(ctx, buildSetSchemaDDL(childSchema, childTable, prow.RetentionSchema.String)); err != nil {
+			return fmt.Errorf("archive set schema: %w", err)
+		}
+		if err := partitionsrepo.New(p.pool).MarkPartitionDetached(ctx, row.ID); err != nil {
+			return fmt.Errorf("mark archived: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown HookDecision %d", decision)
+	}
+}
+
+// detachConcurrentlyIfNeeded runs DETACH PARTITION CONCURRENTLY when the
+// child is still attached. Already-detached tables are a no-op so a
+// crashed prior attempt can resume.
+func (p *Impl) detachConcurrentlyIfNeeded(
+	ctx context.Context,
+	parentSchema, parentTable, childSchema, childTable string,
+) error {
+	attached, err := p.isAttachedPartition(ctx, parentSchema, parentTable, childSchema, childTable)
+	if err != nil {
+		return err
+	}
+	if !attached {
+		return nil
+	}
+	ddl := buildDetachConcurrentlyDDL(parentSchema, parentTable, childSchema, childTable)
+	if _, err := p.pool.Exec(ctx, ddl); err != nil {
+		return fmt.Errorf("detach concurrently: %w", err)
+	}
+	return nil
+}
+
+func (p *Impl) isAttachedPartition(
+	ctx context.Context,
+	parentSchema, parentTable, childSchema, childTable string,
+) (bool, error) {
+	const q = `
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_catalog.pg_inherits i
+  JOIN pg_catalog.pg_class c ON c.oid = i.inhrelid
+  JOIN pg_catalog.pg_namespace nc ON nc.oid = c.relnamespace
+  JOIN pg_catalog.pg_class p ON p.oid = i.inhparent
+  JOIN pg_catalog.pg_namespace np ON np.oid = p.relnamespace
+  WHERE nc.nspname = $1 AND c.relname = $2
+    AND np.nspname = $3 AND p.relname = $4
+)`
+	var attached bool
+	err := p.pool.QueryRow(ctx, q, childSchema, childTable, parentSchema, parentTable).Scan(&attached)
+	if err != nil {
+		return false, fmt.Errorf("check partition attachment: %w", err)
+	}
+	return attached, nil
 }
 
 // dropOne drops one child unconditionally (DROP TABLE IF EXISTS ...
