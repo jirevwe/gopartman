@@ -21,6 +21,7 @@ func New(opts ...Option) (*Manager, error) {
 		logger:   slog.Default(),
 		schedule: defaultScheduleInterval,
 		meter:    NoopMeter{},
+		ddlMode:  PartitionDDLModeClassic,
 	}
 	for _, opt := range opts {
 		if err := opt(m); err != nil {
@@ -89,5 +90,19 @@ func WithMeter(mtr Meter) Option {
 	return func(m *Manager) error {
 		m.meter = mtr
 		return nil
+	}
+}
+
+// WithPartitionDDLMode selects classic or online partition DDL.
+// Optional. Defaults to PartitionDDLModeClassic. See ADR-0013.
+func WithPartitionDDLMode(mode PartitionDDLMode) Option {
+	return func(m *Manager) error {
+		switch mode {
+		case PartitionDDLModeClassic, PartitionDDLModeOnline:
+			m.ddlMode = mode
+			return nil
+		default:
+			return fmt.Errorf("gopartman: unknown PartitionDDLMode %d", mode)
+		}
 	}
 }

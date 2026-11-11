@@ -144,9 +144,15 @@ func countMetadataPartitions(t *testing.T, pool *pgxpool.Pool, parentID string) 
 
 func newProvisioner(t *testing.T, pool *pgxpool.Pool, clockAt time.Time) *provisioner.Impl {
 	t.Helper()
+	return newProvisionerMode(t, pool, clockAt, false)
+}
+
+func newProvisionerMode(t *testing.T, pool *pgxpool.Pool, clockAt time.Time, online bool) *provisioner.Impl {
+	t.Helper()
 	p, err := provisioner.New(provisioner.Config{
-		Pool:  pool,
-		Clock: partman.NewSimulatedClock(clockAt),
+		Pool:   pool,
+		Clock:  partman.NewSimulatedClock(clockAt),
+		Online: online,
 	})
 	if err != nil {
 		t.Fatalf("provisioner.New: %v", err)
@@ -386,6 +392,102 @@ func TestEnsurePartitions_RetryAfterRollbackSucceeds(t *testing.T) {
 	// (3 children in pg_inherits; the manual one was detached.)
 	if got := countChildPartitions(t, pool, f.Schema, f.Table); got != 3 {
 		t.Errorf("children after retry = %d, want 3", got)
+	}
+}
+
+func TestEnsurePartitions_OnlineMode_CreatesViaAttach(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool, "daily", "", 2)
+
+	clockAt := time.Date(2026, 3, 15, 13, 37, 0, 0, time.UTC)
+	p := newProvisionerMode(t, pool, clockAt, true)
+
+	rep, err := p.EnsurePartitions(t.Context(), provisioner.ParentRef{
+		SchemaName: f.Schema, TableName: f.Table,
+	}, nil)
+	if err != nil {
+		t.Fatalf("EnsurePartitions online: %v", err)
+	}
+	if rep.BoundedCreated != 3 || !rep.DefaultCreated {
+		t.Errorf("report = %+v, want {BoundedCreated:3, DefaultCreated:true}", rep)
+	}
+	if got := countChildPartitions(t, pool, f.Schema, f.Table); got != 4 {
+		t.Errorf("child partitions = %d, want 4", got)
+	}
+	if got := countMetadataPartitions(t, pool, f.ParentID); got != 4 {
+		t.Errorf("metadata rows = %d, want 4", got)
+	}
+	dayExpr := partitionBoundExpr(t, pool, f.Schema, "events_20260315")
+	if !strings.Contains(dayExpr, "'2026-03-15 00:00:00+00'") || !strings.Contains(dayExpr, "'2026-03-16 00:00:00+00'") {
+		t.Errorf("expected midnight UTC bounds, got: %s", dayExpr)
+	}
+}
+
+func TestEnsurePartitions_OnlineMode_IsIdempotent(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool, "daily", "", 1)
+	p := newProvisionerMode(t, pool, time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC), true)
+
+	if _, err := p.EnsurePartitions(t.Context(), provisioner.ParentRef{SchemaName: f.Schema, TableName: f.Table}, nil); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	first := countChildPartitions(t, pool, f.Schema, f.Table)
+	rep, err := p.EnsurePartitions(t.Context(), provisioner.ParentRef{SchemaName: f.Schema, TableName: f.Table}, nil)
+	if err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	if rep.BoundedCreated != 0 || rep.DefaultCreated {
+		t.Errorf("second report = %+v, want empty", rep)
+	}
+	if got := countChildPartitions(t, pool, f.Schema, f.Table); got != first {
+		t.Errorf("children changed on idempotent call: %d -> %d", first, got)
+	}
+}
+
+func TestEnsurePartitions_OnlineMode_CompletesAfterBriefParentShare(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool, "daily", "", 0)
+	clockAt := time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC)
+
+	// Hold ACCESS SHARE briefly so attach must wait, then release.
+	blocker, err := pool.Acquire(t.Context())
+	if err != nil {
+		t.Fatalf("acquire blocker: %v", err)
+	}
+	defer blocker.Release()
+	tx, err := blocker.Begin(t.Context())
+	if err != nil {
+		t.Fatalf("begin blocker tx: %v", err)
+	}
+	if _, err := tx.Exec(t.Context(),
+		fmt.Sprintf(`LOCK TABLE %s.%s IN ACCESS SHARE MODE`, quoteIdent(f.Schema), quoteIdent(f.Table)),
+	); err != nil {
+		t.Fatalf("lock parent: %v", err)
+	}
+
+	done := make(chan error, 1)
+	started := time.Now()
+	go func() {
+		p := newProvisionerMode(t, pool, clockAt, true)
+		_, err := p.EnsurePartitions(context.Background(), provisioner.ParentRef{
+			SchemaName: f.Schema, TableName: f.Table,
+		}, nil)
+		done <- err
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	_ = tx.Rollback(t.Context())
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("online Ensure after share release: %v", err)
+		}
+		if time.Since(started) > 10*time.Second {
+			t.Fatalf("online Ensure took too long after share release: %s", time.Since(started))
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("online Ensure timed out after share release")
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -77,6 +78,8 @@ type Config struct {
 	Clock  Clock
 	Logger *slog.Logger
 	Meter  Meter
+	// Online enables prepare-then-ATTACH for bounded children (ADR-0013).
+	Online bool
 }
 
 // Impl is the concrete Provisioner. Exported so the Manager facade can
@@ -87,6 +90,7 @@ type Impl struct {
 	clock  Clock
 	logger *slog.Logger
 	meter  Meter
+	online bool
 }
 
 // New constructs an Impl. Pool and Clock are required; Logger defaults
@@ -111,6 +115,7 @@ func New(cfg Config) (*Impl, error) {
 		clock:  cfg.Clock,
 		logger: logger,
 		meter:  meter,
+		online: cfg.Online,
 	}, nil
 }
 
@@ -182,7 +187,11 @@ func (p *Impl) EnsurePartitions(ctx context.Context, parent ParentRef, tenant *T
 		return EnsureReport{}, nil
 	}
 
-	if err := retry.Do(ctx, p.retryPolicy("provisioner-ensure"), func() error {
+	if p.online {
+		if err := p.createOnline(ctx, prow, tenant, toCreate, needDefault, k); err != nil {
+			return EnsureReport{}, err
+		}
+	} else if err := retry.Do(ctx, p.retryPolicy("provisioner-ensure"), func() error {
 		return p.createInTx(ctx, prow, tenant, toCreate, needDefault, k)
 	}); err != nil {
 		return EnsureReport{}, err
@@ -308,6 +317,134 @@ func (p *Impl) createInTx(
 		return fmt.Errorf("provisioner: commit: %w", err)
 	}
 	return nil
+}
+
+const onlineAttachLockTimeout = "3s"
+
+// createOnline prepares each missing bounded child as a standalone
+// table, attaches it with a short lock_timeout, then upserts metadata.
+// Default create keeps the classic PARTITION OF path inside a small tx.
+// See ADR-0013.
+func (p *Impl) createOnline(
+	ctx context.Context,
+	prow parentsrepo.PartmanParentTable,
+	tenant *TenantRef,
+	toCreate []naming.Bounds,
+	needDefault bool,
+	k kind,
+) error {
+	tenantIdStr := ""
+	var tenantParam pgtype.Text
+	if tenant != nil {
+		tenantIdStr = tenant.TenantId
+		tenantParam = pgtype.Text{String: tenant.TenantId, Valid: true}
+	}
+	timeCol := timeColumnFromPartitionBy(prow.PartitionBy)
+	tenantCol := ""
+	if prow.TenantColumn.Valid {
+		tenantCol = prow.TenantColumn.String
+	}
+
+	for _, b := range toCreate {
+		tn := naming.TableName{
+			SchemaName: prow.SchemaName,
+			ParentName: prow.TableName,
+			TenantId:   tenantIdStr,
+			Bounds:     b,
+			IsDefault:  false,
+			Interval:   canonicalIntervalFor(k),
+		}
+		fq, err := tn.Build()
+		if err != nil {
+			return fmt.Errorf("provisioner: build partition name: %w", err)
+		}
+		childSchema, childTable, ok := splitFQ(fq)
+		if !ok {
+			return fmt.Errorf("provisioner: unexpected FQ shape %q", fq)
+		}
+		if err := retry.Do(ctx, p.retryPolicy("provisioner-online-attach"), func() error {
+			return p.attachOneOnline(ctx, prow, childSchema, childTable, tenantIdStr, tenantCol, timeCol, tenantParam, b, fq)
+		}); err != nil {
+			return err
+		}
+	}
+
+	if needDefault {
+		if err := retry.Do(ctx, p.retryPolicy("provisioner-online-default"), func() error {
+			return p.createInTx(ctx, prow, tenant, nil, true, k)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Impl) attachOneOnline(
+	ctx context.Context,
+	prow parentsrepo.PartmanParentTable,
+	childSchema, childTable, tenantIdStr, tenantCol, timeCol string,
+	tenantParam pgtype.Text,
+	b naming.Bounds,
+	fq string,
+) error {
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("provisioner: acquire: %w", err)
+	}
+	defer conn.Release()
+
+	likeDDL := buildStandaloneLikeDDL(prow.SchemaName, prow.TableName, childSchema, childTable)
+	if _, err := conn.Exec(ctx, likeDDL); err != nil {
+		return fmt.Errorf("provisioner: create standalone %s: %w", fq, err)
+	}
+
+	// Constraint may already exist after a partial retry; ignore duplicate.
+	checkDDL := buildBoundsCheckDDL(childSchema, childTable, timeCol, tenantCol, tenantIdStr, b)
+	if _, err := conn.Exec(ctx, checkDDL); err != nil && !isAlreadyExists(err) {
+		return fmt.Errorf("provisioner: add bounds check %s: %w", fq, err)
+	}
+
+	if _, err := conn.Exec(ctx, "SET lock_timeout TO '"+onlineAttachLockTimeout+"'"); err != nil {
+		return fmt.Errorf("provisioner: set lock_timeout: %w", err)
+	}
+	defer func() {
+		_, _ = conn.Exec(context.WithoutCancel(ctx), "SET lock_timeout TO DEFAULT")
+	}()
+	attachDDL := buildAttachPartitionDDL(prow.SchemaName, prow.TableName, childSchema, childTable, tenantIdStr, b)
+	if _, err := conn.Exec(ctx, attachDDL); err != nil {
+		if isAlreadyAttached(err) {
+			// Child is already a partition; continue to metadata upsert.
+		} else {
+			return fmt.Errorf("provisioner: attach %s: %w", fq, err)
+		}
+	}
+
+	partitions := partitionsrepo.New(conn)
+	if err := partitions.UpsertPartition(ctx, partitionsrepo.UpsertPartitionParams{
+		ID:                  ulid.Make().String(),
+		Name:                fq,
+		ParentTableID:       prow.ID,
+		TenantID:            tenantParam,
+		PartitionBy:         prow.PartitionBy,
+		PartitionType:       prow.PartitionType,
+		PartitionBoundsFrom: pgtype.Timestamptz{Time: b.From, Valid: true},
+		PartitionBoundsTo:   pgtype.Timestamptz{Time: b.To, Valid: true},
+		IsDefault:           false,
+	}); err != nil {
+		return fmt.Errorf("provisioner: upsert bounded metadata %s: %w", fq, err)
+	}
+	return nil
+}
+
+func isAlreadyExists(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42710" // duplicate_object
+}
+
+func isAlreadyAttached(err error) bool {
+	// 42P17 invalid_object_definition / duplicate attachment messages vary;
+	// treat "is already a partition" text as success for retries.
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "is already a partition")
 }
 
 // retryPolicy returns the default policy wired to this Impl's meter so
