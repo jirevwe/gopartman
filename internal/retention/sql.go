@@ -38,6 +38,15 @@ func buildDetachConcurrentlyDDL(parentSchema, parentTable, childSchema, childTab
 	return fmt.Sprintf("ALTER TABLE %s DETACH PARTITION %s CONCURRENTLY", parentFQ, childFQ)
 }
 
+// buildAttachDefaultDDL returns ATTACH PARTITION … DEFAULT for the
+// parent's default child. Used to restore the DEFAULT after a brief
+// plain DETACH so DETACH CONCURRENTLY can run on dated children.
+func buildAttachDefaultDDL(parentSchema, parentTable, childSchema, childTable string) string {
+	parentFQ := pgx.Identifier{parentSchema, parentTable}.Sanitize()
+	childFQ := pgx.Identifier{childSchema, childTable}.Sanitize()
+	return fmt.Sprintf("ALTER TABLE %s ATTACH PARTITION %s DEFAULT", parentFQ, childFQ)
+}
+
 // buildSetSchemaDDL returns an ALTER TABLE <fq> SET SCHEMA <target>
 // statement. The target schema is sanitized.
 func buildSetSchemaDDL(childSchema, childTable, targetSchema string) string {

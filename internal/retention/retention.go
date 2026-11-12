@@ -165,6 +165,27 @@ func (p *Impl) Sweep(ctx context.Context, parent ParentRef, opts ...SweepOption)
 
 	report := SweepReport{Considered: len(candidates), DryRun: o.dryRun}
 
+	// Postgres rejects DETACH PARTITION CONCURRENTLY while a DEFAULT
+	// partition is attached. Online mode briefly plain-DETACHEs the
+	// DEFAULT (if present), runs concurrent work, then re-ATTACHes it.
+	// Also repairs a DEFAULT left detached by a prior crashed Sweep.
+	var defaultGuard *onlineDefaultGuard
+	if p.online && !o.dryRun {
+		var guardErr error
+		defaultGuard, guardErr = p.beginOnlineDefaultGuard(ctx, prow)
+		if guardErr != nil {
+			return report, guardErr
+		}
+		defer func() {
+			if restoreErr := defaultGuard.restore(ctx); restoreErr != nil {
+				p.logger.Error("retention: failed to re-attach default partition after online Sweep",
+					"parent", parentLabel,
+					"err", restoreErr,
+				)
+			}
+		}()
+	}
+
 	for i := range candidates {
 		row := candidates[i]
 		ref, err := buildPartitionRef(prow.TableName, row)
@@ -433,6 +454,104 @@ func (p *Impl) detachConcurrentlyIfNeeded(
 		return fmt.Errorf("detach concurrently: %w", err)
 	}
 	return nil
+}
+
+// onlineDefaultGuard tracks a parent DEFAULT that must be re-attached
+// after online concurrent detach work. Postgres forbids DETACH
+// CONCURRENTLY while a DEFAULT is attached (SQLSTATE 55000).
+type onlineDefaultGuard struct {
+	p            *Impl
+	parentSchema string
+	parentTable  string
+	childSchema  string
+	childTable   string
+	needsRestore bool
+}
+
+func (p *Impl) beginOnlineDefaultGuard(
+	ctx context.Context,
+	prow parentsrepo.PartmanParentTable,
+) (*onlineDefaultGuard, error) {
+	childTable := prow.TableName + "_default"
+	g := &onlineDefaultGuard{
+		p:            p,
+		parentSchema: prow.SchemaName,
+		parentTable:  prow.TableName,
+		childSchema:  prow.SchemaName,
+		childTable:   childTable,
+	}
+
+	exists, err := p.relationExists(ctx, prow.SchemaName, childTable)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return g, nil
+	}
+
+	attached, err := p.isAttachedPartition(ctx, prow.SchemaName, prow.TableName, prow.SchemaName, childTable)
+	if err != nil {
+		return nil, err
+	}
+	g.needsRestore = true
+	if !attached {
+		// Prior Sweep crashed after plain-DETACH of DEFAULT; restore later.
+		return g, nil
+	}
+
+	ddl := buildDetachDDL(prow.SchemaName, prow.TableName, prow.SchemaName, childTable)
+	if _, err := p.pool.Exec(ctx, ddl); err != nil {
+		return nil, fmt.Errorf("retention: detach default for online Sweep: %w", err)
+	}
+	p.logger.Info("retention: detached default partition for online concurrent detach",
+		"parent", prow.SchemaName+"."+prow.TableName,
+		"default", prow.SchemaName+"."+childTable,
+	)
+	return g, nil
+}
+
+func (g *onlineDefaultGuard) restore(ctx context.Context) error {
+	if g == nil || !g.needsRestore {
+		return nil
+	}
+	attached, err := g.p.isAttachedPartition(ctx, g.parentSchema, g.parentTable, g.childSchema, g.childTable)
+	if err != nil {
+		return err
+	}
+	if attached {
+		return nil
+	}
+	exists, err := g.p.relationExists(ctx, g.childSchema, g.childTable)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	ddl := buildAttachDefaultDDL(g.parentSchema, g.parentTable, g.childSchema, g.childTable)
+	if _, err := g.p.pool.Exec(ctx, ddl); err != nil {
+		return fmt.Errorf("attach default: %w", err)
+	}
+	g.p.logger.Info("retention: re-attached default partition after online Sweep",
+		"parent", g.parentSchema+"."+g.parentTable,
+		"default", g.childSchema+"."+g.childTable,
+	)
+	return nil
+}
+
+func (p *Impl) relationExists(ctx context.Context, schema, table string) (bool, error) {
+	var exists bool
+	err := p.pool.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM pg_catalog.pg_class c
+			JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname = $1 AND c.relname = $2
+		)`, schema, table,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check relation exists: %w", err)
+	}
+	return exists, nil
 }
 
 func (p *Impl) isAttachedPartition(

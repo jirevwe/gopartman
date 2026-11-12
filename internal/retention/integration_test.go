@@ -34,9 +34,11 @@ type parentOpt func(*parentOpts)
 
 type parentOpts struct {
 	retentionSchema string
+	tenantColumn    string
 }
 
 func withRetentionSchema(s string) parentOpt { return func(o *parentOpts) { o.retentionSchema = s } }
+func withTenantColumn(c string) parentOpt    { return func(o *parentOpts) { o.tenantColumn = c } }
 
 // setupParent creates a fresh schema, a range-partitioned parent
 // table, and the corresponding partman.parent_tables row with a 30-
@@ -56,10 +58,22 @@ func setupParent(t *testing.T, pool *pgxpool.Pool, opts ...parentOpt) parentFixt
 		t.Fatalf("create schema: %v", err)
 	}
 
-	createDDL := fmt.Sprintf(
-		`CREATE TABLE %s.%s (id BIGSERIAL, created_at TIMESTAMPTZ NOT NULL) PARTITION BY RANGE (created_at)`,
-		quoteIdent(schema), quoteIdent(table),
-	)
+	var partitionBy, createDDL string
+	var tenantColArg any
+	if o.tenantColumn == "" {
+		partitionBy = "created_at"
+		createDDL = fmt.Sprintf(
+			`CREATE TABLE %s.%s (id BIGSERIAL, created_at TIMESTAMPTZ NOT NULL) PARTITION BY RANGE (created_at)`,
+			quoteIdent(schema), quoteIdent(table),
+		)
+	} else {
+		partitionBy = o.tenantColumn + ", created_at"
+		tenantColArg = o.tenantColumn
+		createDDL = fmt.Sprintf(
+			`CREATE TABLE %s.%s (id BIGSERIAL, %s VARCHAR NOT NULL, created_at TIMESTAMPTZ NOT NULL) PARTITION BY RANGE (%s, created_at)`,
+			quoteIdent(schema), quoteIdent(table), quoteIdent(o.tenantColumn), quoteIdent(o.tenantColumn),
+		)
+	}
 	if _, err := pool.Exec(ctx, createDDL); err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
@@ -81,9 +95,9 @@ func setupParent(t *testing.T, pool *pgxpool.Pool, opts ...parentOpt) parentFixt
 			 partition_by, partition_type, partition_interval,
 			 retention_period, retention_keep_table, retention_schema,
 			 automatic_maintenance, premake)
-		VALUES ($1, $2, $3, NULL, 'created_at', 'range', 'daily',
-			INTERVAL '30 days', false, $4, true, 1)
-	`, parentID, schema, table, retentionSchemaArg)
+		VALUES ($1, $2, $3, $4, $5, 'range', 'daily',
+			INTERVAL '30 days', false, $6, true, 1)
+	`, parentID, schema, table, tenantColArg, partitionBy, retentionSchemaArg)
 	if err != nil {
 		t.Fatalf("insert parent_tables row: %v", err)
 	}
@@ -154,6 +168,51 @@ func insertDefaultPartition(t *testing.T, pool *pgxpool.Pool, f parentFixture) s
 		VALUES ($1, $2, $3, NULL, 'created_at', 'range', $4, $4, true, 'active')
 	`, partitionID, fq, f.ParentID, epoch); err != nil {
 		t.Fatalf("insert default partitions row: %v", err)
+	}
+	return partitionID
+}
+
+func ensureTenant(t *testing.T, pool *pgxpool.Pool, parentID, tenantID string) {
+	t.Helper()
+	_, err := pool.Exec(t.Context(),
+		`INSERT INTO partman.tenants (id, parent_table_id) VALUES ($1, $2)
+		 ON CONFLICT DO NOTHING`,
+		tenantID, parentID,
+	)
+	if err != nil {
+		t.Fatalf("insert tenant %s: %v", tenantID, err)
+	}
+}
+
+// insertTenantPartition creates a composite-range child for a tenanted
+// parent. Child names follow {parent}_{tenant}_{YYYYMMDD}.
+func insertTenantPartition(t *testing.T, pool *pgxpool.Pool, f parentFixture, childTable, tenantID string, from, to time.Time) string {
+	t.Helper()
+	ctx := t.Context()
+	ensureTenant(t, pool, f.ParentID, tenantID)
+
+	ddl := fmt.Sprintf(
+		`CREATE TABLE %s.%s PARTITION OF %s.%s FOR VALUES FROM ('%s', TIMESTAMPTZ '%s') TO ('%s', TIMESTAMPTZ '%s')`,
+		quoteIdent(f.Schema), quoteIdent(childTable),
+		quoteIdent(f.Schema), quoteIdent(f.Table),
+		tenantID, from.UTC().Format(time.RFC3339),
+		tenantID, to.UTC().Format(time.RFC3339),
+	)
+	if _, err := pool.Exec(ctx, ddl); err != nil {
+		t.Fatalf("create tenant child %s: %v", childTable, err)
+	}
+
+	partitionID := ulid.Make().String()
+	fq := f.Schema + "." + childTable
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO partman.partitions
+			(id, name, parent_table_id, tenant_id,
+			 partition_by, partition_type,
+			 partition_bounds_from, partition_bounds_to,
+			 is_default, status)
+		VALUES ($1, $2, $3, $4, 'project_id, created_at', 'range', $5, $6, false, 'active')
+	`, partitionID, fq, f.ParentID, tenantID, from, to); err != nil {
+		t.Fatalf("insert tenant partitions row: %v", err)
 	}
 	return partitionID
 }
@@ -613,11 +672,163 @@ func TestSweep_OnlineMode_DropsViaConcurrentDetach(t *testing.T) {
 	}
 }
 
+// TestSweep_OnlineMode_DropsWithDefaultPresent locks the Postgres rule that
+// DETACH PARTITION CONCURRENTLY fails with SQLSTATE 55000 while a DEFAULT
+// partition is attached. Every gopartman parent keeps a DEFAULT, so online
+// Sweep must still drop expired dated children and leave the DEFAULT attached.
+func TestSweep_OnlineMode_DropsWithDefaultPresent(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool)
+	insertDefaultPartition(t, pool, f)
+	insertBoundedPartition(t, pool, f, "events_20260415", pastFrom, pastTo)
+
+	detachDDL := fmt.Sprintf(
+		`ALTER TABLE %s.%s DETACH PARTITION %s.%s CONCURRENTLY`,
+		quoteIdent(f.Schema), quoteIdent(f.Table),
+		quoteIdent(f.Schema), quoteIdent("events_20260415"),
+	)
+	_, err := pool.Exec(t.Context(), detachDDL)
+	if err == nil {
+		t.Fatal("expected DETACH CONCURRENTLY to fail while DEFAULT is attached")
+	}
+	errText := err.Error()
+	if !strings.Contains(errText, "cannot detach partitions concurrently when a default partition exists") &&
+		!strings.Contains(errText, "SQLSTATE 55000") {
+		t.Fatalf("unexpected DETACH CONCURRENTLY error: %v", err)
+	}
+
+	r := newRetentionMode(t, pool, nowFixed, nil, true)
+	report, err := r.Sweep(t.Context(), retention.ParentRef{SchemaName: f.Schema, TableName: f.Table})
+	if err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if len(report.Dropped) != 1 {
+		t.Fatalf("Dropped = %d, want 1 (expired child must drop despite DEFAULT); Skipped = %d",
+			len(report.Dropped), len(report.Skipped))
+	}
+	if tableExists(t, pool, f.Schema, "events_20260415") {
+		t.Error("expected expired child dropped")
+	}
+	if !tableExists(t, pool, f.Schema, "events_default") {
+		t.Error("default partition must remain")
+	}
+	if !isChildOf(t, pool, f.Schema, f.Table, f.Schema, "events_default") {
+		t.Error("default partition must be re-attached after online Sweep")
+	}
+	if partitionStatus(t, pool, f.Schema+".events_default") != "active" {
+		t.Error("default partition metadata must stay active")
+	}
+}
+
+// TestSweep_OnlineMode_DropsTenantChildrenWithDefaultPresent mirrors production
+// Maintain logs: several expired tenant-dated children under one parent DEFAULT
+// were skipped with SQLSTATE 55000 and partitions_dropped=0. Online Sweep must
+// drop all of them in one pass and leave the DEFAULT attached.
+func TestSweep_OnlineMode_DropsTenantChildrenWithDefaultPresent(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool, withTenantColumn("project_id"))
+	insertDefaultPartition(t, pool, f)
+
+	tenantID := "01TESTPROJECT00000000000001"
+	expired := []struct {
+		name string
+		from time.Time
+		to   time.Time
+	}{
+		{fmt.Sprintf("events_%s_20260415", tenantID), pastFrom, pastTo},
+		{fmt.Sprintf("events_%s_20260315", tenantID), past2From, past2To},
+		{fmt.Sprintf("events_%s_20260215", tenantID), past3From, past3To},
+	}
+	for _, e := range expired {
+		insertTenantPartition(t, pool, f, e.name, tenantID, e.from, e.to)
+	}
+	currentName := fmt.Sprintf("events_%s_20260614", tenantID)
+	insertTenantPartition(t, pool, f, currentName, tenantID, currFrom, currTo)
+
+	r := newRetentionMode(t, pool, nowFixed, nil, true)
+	report, err := r.Sweep(t.Context(), retention.ParentRef{SchemaName: f.Schema, TableName: f.Table})
+	if err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if len(report.Dropped) != 3 {
+		t.Fatalf("Dropped = %d, want 3; Skipped = %d", len(report.Dropped), len(report.Skipped))
+	}
+	for _, e := range expired {
+		if tableExists(t, pool, f.Schema, e.name) {
+			t.Errorf("expected expired child %s dropped", e.name)
+		}
+	}
+	if !tableExists(t, pool, f.Schema, currentName) {
+		t.Error("current tenant partition must remain")
+	}
+	if !isChildOf(t, pool, f.Schema, f.Table, f.Schema, "events_default") {
+		t.Error("default partition must be re-attached after online Sweep")
+	}
+}
+
+func TestSweep_OnlineMode_HookDetachWithDefaultPresent(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool)
+	insertDefaultPartition(t, pool, f)
+	insertBoundedPartition(t, pool, f, "events_20260415", pastFrom, pastTo)
+
+	hook := func(_ context.Context, _ hooks.PartitionRef) hooks.HookDecision {
+		return hooks.HookDetach
+	}
+	r := newRetentionMode(t, pool, nowFixed, hook, true)
+	report, err := r.Sweep(t.Context(), retention.ParentRef{SchemaName: f.Schema, TableName: f.Table})
+	if err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if len(report.Detached) != 1 {
+		t.Fatalf("Detached = %d, want 1; Skipped = %d", len(report.Detached), len(report.Skipped))
+	}
+	if !tableExists(t, pool, f.Schema, "events_20260415") {
+		t.Error("detached partition table should still exist")
+	}
+	if isChildOf(t, pool, f.Schema, f.Table, f.Schema, "events_20260415") {
+		t.Error("detached partition should no longer be in pg_inherits")
+	}
+	if !isChildOf(t, pool, f.Schema, f.Table, f.Schema, "events_default") {
+		t.Error("default partition must be re-attached after online Sweep")
+	}
+}
+
+func TestSweep_OnlineMode_HookArchiveWithDefaultPresent(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	archiveSchema := "arc_" + strings.ToLower(ulid.Make().String())
+	f := setupParent(t, pool, withRetentionSchema(archiveSchema))
+	insertDefaultPartition(t, pool, f)
+	insertBoundedPartition(t, pool, f, "events_20260415", pastFrom, pastTo)
+
+	hook := func(_ context.Context, _ hooks.PartitionRef) hooks.HookDecision {
+		return hooks.HookArchive
+	}
+	r := newRetentionMode(t, pool, nowFixed, hook, true)
+	report, err := r.Sweep(t.Context(), retention.ParentRef{SchemaName: f.Schema, TableName: f.Table})
+	if err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if len(report.Archived) != 1 {
+		t.Fatalf("Archived = %d, want 1; Skipped = %d", len(report.Archived), len(report.Skipped))
+	}
+	if tableExists(t, pool, f.Schema, "events_20260415") {
+		t.Error("archived child should no longer exist in original schema")
+	}
+	if !tableExists(t, pool, archiveSchema, "events_20260415") {
+		t.Errorf("archived child should now live in %s schema", archiveSchema)
+	}
+	if !isChildOf(t, pool, f.Schema, f.Table, f.Schema, "events_default") {
+		t.Error("default partition must be re-attached after online Sweep")
+	}
+}
+
 func TestSweep_OnlineMode_AllowsInsertsDuringDrop(t *testing.T) {
 	pool, _ := testsupport.NewPG(t)
 	f := setupParent(t, pool)
+	insertDefaultPartition(t, pool, f)
 	insertBoundedPartition(t, pool, f, "events_20260415", pastFrom, pastTo)
-	// Current partition so inserts have a home while the expired child drops.
+	// Current partition so inserts have a home while DEFAULT is briefly detached.
 	insertBoundedPartition(t, pool, f, "events_20260614", currFrom, currTo)
 
 	insertErr := make(chan error, 1)
@@ -647,21 +858,34 @@ func TestSweep_OnlineMode_AllowsInsertsDuringDrop(t *testing.T) {
 	if tableExists(t, pool, f.Schema, "events_20260415") {
 		t.Error("expected expired child dropped")
 	}
+	if !isChildOf(t, pool, f.Schema, f.Table, f.Schema, "events_default") {
+		t.Error("default partition must be re-attached after online Sweep")
+	}
 }
 
 func TestSweep_OnlineMode_ResumeAfterDetach(t *testing.T) {
 	pool, _ := testsupport.NewPG(t)
 	f := setupParent(t, pool)
+	insertDefaultPartition(t, pool, f)
 	insertBoundedPartition(t, pool, f, "events_20260415", pastFrom, pastTo)
 
-	// Simulate a crash after concurrent detach succeeded but before mark/drop.
-	detachDDL := fmt.Sprintf(
+	// Simulate a crash after DEFAULT was detached for concurrent work but
+	// before expired children finished and DEFAULT was re-attached.
+	detachDefault := fmt.Sprintf(
+		`ALTER TABLE %s.%s DETACH PARTITION %s.%s`,
+		quoteIdent(f.Schema), quoteIdent(f.Table),
+		quoteIdent(f.Schema), quoteIdent("events_default"),
+	)
+	if _, err := pool.Exec(t.Context(), detachDefault); err != nil {
+		t.Fatalf("pre-detach default: %v", err)
+	}
+	detachChild := fmt.Sprintf(
 		`ALTER TABLE %s.%s DETACH PARTITION %s.%s CONCURRENTLY`,
 		quoteIdent(f.Schema), quoteIdent(f.Table),
 		quoteIdent(f.Schema), quoteIdent("events_20260415"),
 	)
-	if _, err := pool.Exec(t.Context(), detachDDL); err != nil {
-		t.Fatalf("pre-detach: %v", err)
+	if _, err := pool.Exec(t.Context(), detachChild); err != nil {
+		t.Fatalf("pre-detach child: %v", err)
 	}
 
 	r := newRetentionMode(t, pool, nowFixed, nil, true)
@@ -670,10 +894,13 @@ func TestSweep_OnlineMode_ResumeAfterDetach(t *testing.T) {
 		t.Fatalf("Sweep after partial detach: %v", err)
 	}
 	if len(report.Dropped) != 1 {
-		t.Fatalf("Dropped = %d, want 1", len(report.Dropped))
+		t.Fatalf("Dropped = %d, want 1; Skipped = %d", len(report.Dropped), len(report.Skipped))
 	}
 	if tableExists(t, pool, f.Schema, "events_20260415") {
 		t.Error("expected detached child dropped on resume")
+	}
+	if !isChildOf(t, pool, f.Schema, f.Table, f.Schema, "events_default") {
+		t.Error("default partition must be re-attached on resume")
 	}
 }
 
