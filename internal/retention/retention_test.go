@@ -126,6 +126,14 @@ func TestBuildDetachConcurrentlyDDL(t *testing.T) {
 	}
 }
 
+func TestBuildAttachDefaultDDL(t *testing.T) {
+	got := buildAttachDefaultDDL("myschema", "events", "myschema", "events_default")
+	want := `ALTER TABLE "myschema"."events" ATTACH PARTITION "myschema"."events_default" DEFAULT`
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestBuildSetSchemaDDL(t *testing.T) {
 	got := buildSetSchemaDDL("myschema", "events_20260315", "archive")
 	want := `ALTER TABLE "myschema"."events_20260315" SET SCHEMA "archive"`

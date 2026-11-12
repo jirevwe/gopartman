@@ -49,19 +49,21 @@ time. Default partition create may keep the classic
 
 ### Online retention
 
-For `HookDrop`:
+Postgres rejects `DETACH PARTITION CONCURRENTLY` while a DEFAULT
+partition is attached (`SQLSTATE 55000`). Every gopartman parent keeps
+a DEFAULT, so online Sweep must:
 
-1. If the relation is still a partition of the parent, run
-   `ALTER TABLE … DETACH PARTITION … CONCURRENTLY` (no surrounding
-   transaction).
-2. `DROP TABLE … CASCADE` on the detached relation.
-3. `MarkPartitionDropped`.
+1. Plain-`DETACH` the DEFAULT once per Sweep when it is attached (brief
+   exclusive lock). If a prior Crash left the DEFAULT detached, skip
+   this step and still plan to re-attach at the end.
+2. For each expired candidate (`HookDrop` / `HookDetach` /
+   `HookArchive`): `DETACH … CONCURRENTLY` when still attached, then
+   drop or `SET SCHEMA` as today, then mark metadata.
+3. Re-`ATTACH … DEFAULT` the default child.
 
-For `HookDetach` and `HookArchive`: use concurrent detach, then the
-existing archive `SET SCHEMA` step when needed.
-
-Mid-failure must be safe on the next Sweep: if the table is already
-detached, skip detach and continue with drop or metadata update.
+Mid-failure must be safe on the next Sweep: already-detached dated
+children resume drop/mark; a detached DEFAULT is re-attached at the
+end of the next online Sweep.
 
 ### Classic mode
 
@@ -97,6 +99,10 @@ ADR-0004 and ADR-0006 paths stay unchanged when the mode is classic.
   the long wait seen for contended `CREATE … PARTITION OF`.
 - A crash between concurrent detach and metadata mark leaves the next
   Sweep able to finish without erroring forever.
+- Online drop with an attached DEFAULT succeeds (no `55000` skip):
+  dated children drop, DEFAULT is re-attached. Covers tenant-dated
+  children, `HookDetach` / `HookArchive`, and resume after DEFAULT was
+  left detached.
 
 ## Open questions
 
