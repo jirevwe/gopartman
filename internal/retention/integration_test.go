@@ -904,6 +904,37 @@ func TestSweep_OnlineMode_ResumeAfterDetach(t *testing.T) {
 	}
 }
 
+// TestSweep_OnlineMode_ReattachesOrphanDefaultWithNoExpiredWork covers a
+// crashed prior Sweep that left DEFAULT detached when this tick has nothing
+// to drop. Online Sweep must still restore DEFAULT and must not error.
+func TestSweep_OnlineMode_ReattachesOrphanDefaultWithNoExpiredWork(t *testing.T) {
+	pool, _ := testsupport.NewPG(t)
+	f := setupParent(t, pool)
+	insertDefaultPartition(t, pool, f)
+	insertBoundedPartition(t, pool, f, "events_20260614", currFrom, currTo)
+
+	detachDefault := fmt.Sprintf(
+		`ALTER TABLE %s.%s DETACH PARTITION %s.%s`,
+		quoteIdent(f.Schema), quoteIdent(f.Table),
+		quoteIdent(f.Schema), quoteIdent("events_default"),
+	)
+	if _, err := pool.Exec(t.Context(), detachDefault); err != nil {
+		t.Fatalf("pre-detach default: %v", err)
+	}
+
+	r := newRetentionMode(t, pool, nowFixed, nil, true)
+	report, err := r.Sweep(t.Context(), retention.ParentRef{SchemaName: f.Schema, TableName: f.Table})
+	if err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if report.Considered != 0 || len(report.Dropped) != 0 {
+		t.Fatalf("expected no expired work, got Considered=%d Dropped=%d", report.Considered, len(report.Dropped))
+	}
+	if !isChildOf(t, pool, f.Schema, f.Table, f.Schema, "events_default") {
+		t.Error("default partition must be re-attached even when nothing expired")
+	}
+}
+
 // -----------------------------------------------------------------------------
 // helpers
 // -----------------------------------------------------------------------------

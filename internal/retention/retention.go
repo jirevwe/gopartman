@@ -167,12 +167,13 @@ func (p *Impl) Sweep(ctx context.Context, parent ParentRef, opts ...SweepOption)
 
 	// Postgres rejects DETACH PARTITION CONCURRENTLY while a DEFAULT
 	// partition is attached. Online mode briefly plain-DETACHEs the
-	// DEFAULT (if present), runs concurrent work, then re-ATTACHes it.
-	// Also repairs a DEFAULT left detached by a prior crashed Sweep.
+	// DEFAULT when there is expired work, then re-ATTACHes it. Also
+	// repairs a DEFAULT left detached by a prior crashed Sweep even
+	// when this tick has nothing to drop.
 	var defaultGuard *onlineDefaultGuard
 	if p.online && !o.dryRun {
 		var guardErr error
-		defaultGuard, guardErr = p.beginOnlineDefaultGuard(ctx, prow)
+		defaultGuard, guardErr = p.beginOnlineDefaultGuard(ctx, prow, len(candidates) > 0)
 		if guardErr != nil {
 			return report, guardErr
 		}
@@ -471,6 +472,7 @@ type onlineDefaultGuard struct {
 func (p *Impl) beginOnlineDefaultGuard(
 	ctx context.Context,
 	prow parentsrepo.PartmanParentTable,
+	detachForWork bool,
 ) (*onlineDefaultGuard, error) {
 	childTable := prow.TableName + "_default"
 	g := &onlineDefaultGuard{
@@ -493,9 +495,13 @@ func (p *Impl) beginOnlineDefaultGuard(
 	if err != nil {
 		return nil, err
 	}
-	g.needsRestore = true
 	if !attached {
 		// Prior Sweep crashed after plain-DETACH of DEFAULT; restore later.
+		g.needsRestore = true
+		return g, nil
+	}
+	if !detachForWork {
+		// Nothing expired this tick; leave DEFAULT attached.
 		return g, nil
 	}
 
@@ -503,6 +509,7 @@ func (p *Impl) beginOnlineDefaultGuard(
 	if _, err := p.pool.Exec(ctx, ddl); err != nil {
 		return nil, fmt.Errorf("retention: detach default for online Sweep: %w", err)
 	}
+	g.needsRestore = true
 	p.logger.Info("retention: detached default partition for online concurrent detach",
 		"parent", prow.SchemaName+"."+prow.TableName,
 		"default", prow.SchemaName+"."+childTable,
